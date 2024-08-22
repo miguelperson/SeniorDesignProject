@@ -3,7 +3,8 @@
 #include <Wire.h>
 #include <FT6336U.h>
 #include <DHT11.h> // Include the DHT library
-#include "esp_task_wdt.h"
+// #include "esp_task_wdt.h
+#include <max6675.h>
 
 
 // Pin definitions for DHT11
