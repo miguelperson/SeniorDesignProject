@@ -123,8 +123,8 @@ esp_task_wdt_delete(NULL);
     
     // Print stack usage for debugging
     UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-    // Serial.print("High Water Mark: ");
-    // Serial.println(uxHighWaterMark);
+    Serial.print("DHT High Water Mark: ");
+    Serial.println(uxHighWaterMark);
 
     // Serial.print("temp1 - ");
     // Serial.println(temp1);
