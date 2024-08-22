@@ -4,7 +4,8 @@
 #include <FT6336U.h>
 #include <DHT11.h> // Include the DHT library
 // #include "esp_task_wdt.h
-#include <max6675.h>
+#include "MAX6675.h"
+
 
 
 // Pin definitions for DHT11
@@ -25,8 +26,10 @@
 #define CPT_RST 12
 #define CPT_INT 13
 
-// spi connection for ktype thermocouple
-#define kTypeOne 25 // on GPIO 25
+// SPI connection for k-type thermocouple
+#define kTypeCS 25  // Chip Select pin for the thermocouple
+#define kTypeSO 19  // MISO pin for the thermocouple
+#define kTypeSCK 18 // SCK pin for the thermocouple (use the same as HSPI_CLK)
 
 // Setting global variables
 int roomTemp = 0;
@@ -41,6 +44,7 @@ DHT11 dht2(DHTPIN2);
 
 FT6336U ft6336u(CPT_SDA, CPT_SCL, CPT_RST, CPT_INT);
 TFT_eSPI tft = TFT_eSPI(); // Create a TFT_eSPI object
+MAX6675 thermoCouple(kTypeCS, kTypeSO, kTypeSCK); // Corrected MAX6675 instantiation
 
 void setup() {
   Serial.begin(115200); // Initialize serial communication at 115200 baud
@@ -105,15 +109,58 @@ void printMain(){ // prints main display
   tft.print("Heating");
 }
 
+void printSettings() {
+  // tft.fillScreen(TFT_WHITE); // Fill the screen with white color
+  tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK); // Background
+  
+  tft.drawSmoothRoundRect(70, 225, 20, 19, 140, 75, TFT_WHITE); // First button
+  tft.drawSmoothRoundRect(270, 225, 20, 19, 140, 75, TFT_WHITE); // Second button
+
+  //Settings title
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(132, 12); // Set cursor position for title
+  tft.print("/// USER SETTINGS");
+
+  //Setting Options
+  tft.setTextSize(2); // Set the text size for the buttons
+  tft.setCursor(20, 45); // Set cursor position for settings
+  tft.print("Charging Time: ");
+  tft.setCursor(20, 90); // Set cursor position for Start/Stop
+  tft.print("Heating Time: ");
+  tft.setCursor(20, 135); // Set cursor position for settings
+  tft.print("Ambient Temperature: ");
+  tft.setCursor(20, 180); // Set cursor position for Start/Stop
+  tft.print("Temperature Scale: ");
+
+  tft.setTextSize(2); // Set the text size for the buttons
+  tft.setCursor(118, 255); // Set cursor position for settings
+  tft.print("SAVE");
+  tft.setCursor(318, 255); // Set cursor position for Start/Stop
+  tft.print("BACK");
+}
+
 void touchInterface(void *pvParameter){
   while(1){
       if(ft6336u.read_td_status()){ // if touched
-      // Serial.print("FT6336U Touch Position 1: ("); // has the coordinates
-      // Serial.print(ft6336u.read_touch1_x());
-      // Serial.print(" , ");
-      // Serial.print(ft6336u.read_touch1_y());
-      // Serial.println(")");
-      vTaskDelay(100 / portTICK_PERIOD_MS);
+        int x = ft6336u.read_touch1_x();
+        int y = ft6336u.read_touch1_y();
+        Serial.print("FT6336U Touch Position 1: ("); // has the coordinates
+        Serial.print(x);
+        Serial.print(" , ");
+        Serial.print(y);
+        Serial.println(")");
+        if (x >= 20 && x <= 160 && y >= 50 && y <= 125 && screenStatus == 0) { //screenStatus is a global variable, when screen status == 0 this means we're on the main menu, and when screenStatus == 1 then we are in the settings menu
+          screenStatus = 1; // global variable set to settings screen
+          printSettings(); // uses function to print the settings screen to the display
+        }
+
+        if(x <= 80 && x >= 0 && y <= 400 && y >= 276 && screenStatus == 1){ // screenStatus being 1 means display is currently showing settings screen, this if checks if the back button is pressed in the settings menu
+          screenStatus = 0; // set screen status back to main display
+          printMain(); // main screen GUI is then printed to the screen
+        }
+
+
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
   }
 }
