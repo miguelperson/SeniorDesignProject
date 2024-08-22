@@ -6,8 +6,6 @@
 // #include "esp_task_wdt.h
 #include "MAX6675.h"
 
-
-
 // Pin definitions for DHT11
 #define DHTPIN 5      // Pin connected to the first DHT11 data pin
 #define DHTPIN2 16     // Pin connected to the second DHT11 data pin
@@ -31,6 +29,8 @@
 #define kTypeSO 19  // MISO pin for the thermocouple
 #define kTypeSCK 18 // SCK pin for the thermocouple (use the same as HSPI_CLK)
 
+SemaphoreHandle_t xMutex;
+
 // Setting global variables
 int roomTemp = 0;
 int temp1 = 0;
@@ -53,6 +53,13 @@ void setup() {
 
   ft6336u.begin(); // Initialize the FT6336U touch controller
   printMain();
+
+  xMutex = xSemaphoreCreateMutex();
+
+  if (xMutex == NULL) {
+    Serial.println("Mutex creation failed");
+    while(1);
+  }
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL,1,NULL);
   xTaskCreate(&testThread, "testThread",5000, NULL, 2, NULL);
@@ -149,18 +156,22 @@ void touchInterface(void *pvParameter){
         Serial.print(" , ");
         Serial.print(y);
         Serial.println(")");
-        if (x >= 20 && x <= 160 && y >= 50 && y <= 125 && screenStatus == 0) { //screenStatus is a global variable, when screen status == 0 this means we're on the main menu, and when screenStatus == 1 then we are in the settings menu
+
+      if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) { // wrapping screenStatus stuff in mutex apparently
+        if (x >= 20 && x <= 160 && y >= 50 && y <= 125 && screenStatus == 0) {
           screenStatus = 1; // global variable set to settings screen
           printSettings(); // uses function to print the settings screen to the display
         }
 
-        if(x <= 80 && x >= 0 && y <= 400 && y >= 276 && screenStatus == 1){ // screenStatus being 1 means display is currently showing settings screen, this if checks if the back button is pressed in the settings menu
+        if(x <= 80 && x >= 0 && y <= 400 && y >= 276 && screenStatus == 1) {
           screenStatus = 0; // set screen status back to main display
           printMain(); // main screen GUI is then printed to the screen
         }
+        // Release the mutex after modifying screenStatus
+        xSemaphoreGive(xMutex);
+      }
 
-
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+      vTaskDelay(200 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -186,8 +197,13 @@ void testThread(void *pvParameter){ // this makes no fucking sense
     // Serial.print("Average temperature value: ");
     // Serial.print(avgTemp);
 
-    if(screenStatus == 0)
-      changeRoomTemp(avgTemp); // update the value on the screen with the average value
+    // Lock the mutex before accessing screenStatus
+    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+      if(screenStatus == 0)
+        changeRoomTemp(avgTemp); // update the value on the screen with the average value
+      // Release the mutex after reading screenStatus
+      xSemaphoreGive(xMutex);
+    }
     
     vTaskDelay(1000 / portTICK_PERIOD_MS); // not interested in checking the temperatures constantly
   }
