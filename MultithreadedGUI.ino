@@ -24,6 +24,9 @@
 #define CPT_RST 12
 #define CPT_INT 13
 
+// spi connection for ktype thermocouple
+#define kTypeOne 25 // on GPIO 25
+
 // Setting global variables
 int roomTemp = 0;
 int temp1 = 0;
@@ -47,7 +50,7 @@ void setup() {
   printMain();
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL,1,NULL);
-  xTaskCreate(&testThread, "testThread",5000, NULL, 1, NULL);
+  xTaskCreate(&testThread, "testThread",5000, NULL, 2, NULL);
 }
 
 void loop() {}
@@ -115,7 +118,7 @@ void touchInterface(void *pvParameter){
 }
 
 void testThread(void *pvParameter){ // this makes no fucking sense
-esp_task_wdt_delete(NULL);
+// esp_task_wdt_delete(NULL);
   while(1){
     int temp1 = dht1.readTemperature();
     int temp2 = dht2.readTemperature();
