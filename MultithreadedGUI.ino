@@ -31,7 +31,7 @@
 #define kTypeSCK 18 // SCK pin for the thermocouple (use the same as HSPI_CLK)
 
 // Pin definitions for power control
-#define heatOn 34
+#define heatOn 32
 
 SemaphoreHandle_t xMutex;
 
@@ -59,6 +59,7 @@ MAX6675 thermoCouple2(kTypeCS2, kTypeSO, kTypeSCK); // Second thermocouple
 
 void setup() {
   Serial.begin(115200); // Initialize serial communication at 115200 baud
+  pinMode(heatOn, OUTPUT);
 
   thermoCouple1.begin();
   thermoCouple2.begin();
@@ -77,7 +78,7 @@ void setup() {
     Serial.println("Mutex creation failed");
     while(1);
   }
-  pinMode(heatOn, OUTPUT);
+
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL,1,NULL);
   // xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
@@ -210,27 +211,24 @@ void printSettings() {
 // }
 
 void turnOnHeat(){
-Serial.println("heating");
+  heatingRoom = true;
+  digitalWrite(heatOn, HIGH);
 }
 
 void turnOffHeat(){
-Serial.println("no longer heating");
+  heatingRoom = false;
+  digitalWrite(heatOn, LOW);
 }
 
-void heater(void *pvParameter){
+void heater(void *pvParameter){ // responsible for heat scheduling
   while(1){
+    if(heatingRoom){
+      turnOnHeat();
+      } else{
+      turnOffHeat();
+      }
+    vTaskDelay(500  / portTICK_PERIOD_MS);
 
-    digitalWrite(heatOn, HIGH);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-    digitalWrite(heatOn, LOW);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-
-
-    // if(heatingRoom){
-    //   turnOnHeat();
-    //   } else{
-    //   turnOffHeat();
-    //   }
   }
 
 
@@ -258,8 +256,10 @@ void touchInterface(void *pvParameter){
           if(x <= 100 && x >= 0 && y > 173 && y<= 280){
             Serial.println("Start/Stop Charing");
           }
-          if(x <= 100 && x >= 0 && y > 280 && y <= 480){
+          if(x <= 100 && x >= 0 && y > 280 && y <= 480){ // toggles heating
             Serial.println("Start/Stop Heating");
+            heatingRoom = !heatingRoom;
+            
           }
           if(x > 138 && x < 259 && y > 58 && y < 200) // toggle external temp measurement
             celciusTemp = !celciusTemp;
@@ -289,8 +289,8 @@ void testThread(void *pvParameter){ // reading external temperature
     int temp1 = dht1.readTemperature();
     int temp2 = dht2.readTemperature();
     roomTemp = (temp1 + temp2) /2;
-    Serial.println(roomTemp);
-    Serial.println(celciusTemp);
+    // Serial.println(roomTemp);
+    // Serial.println(celciusTemp);
 
     // Serial.print("DHT #1: ");
     // Serial.println(temp1);
