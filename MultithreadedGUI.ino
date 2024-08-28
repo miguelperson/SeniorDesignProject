@@ -25,16 +25,25 @@
 #define CPT_INT 13
 
 // SPI connection for k-type thermocouple
-#define kTypeCS 25  // Chip Select pin for the thermocouple
+#define kTypeCS1 25  // Chip Select pin for the thermocouple
+#define kTypeCS2 26  // CS pin for the second thermocouple
 #define kTypeSO 19  // MISO pin for the thermocouple
 #define kTypeSCK 18 // SCK pin for the thermocouple (use the same as HSPI_CLK)
+
+// Pin definitions for power control
+#define heatOn 34
 
 SemaphoreHandle_t xMutex;
 
 // Setting global variables
 int roomTemp = 0;
+int roomTempF = (roomTemp * 1.8)+32;
 int temp1 = 0;
 int temp2 = 0;
+bool celciusTemp = true;
+
+bool heatingRoom = false;
+
 
 int screenStatus = 0; // 0 - main screeen/ 1 - settings screen
 
@@ -44,10 +53,18 @@ DHT11 dht2(DHTPIN2);
 
 FT6336U ft6336u(CPT_SDA, CPT_SCL, CPT_RST, CPT_INT);
 TFT_eSPI tft = TFT_eSPI(); // Create a TFT_eSPI object
-MAX6675 thermoCouple(kTypeCS, kTypeSO, kTypeSCK); // Corrected MAX6675 instantiation
+
+MAX6675 thermoCouple1(kTypeCS1, kTypeSO, kTypeSCK); // First thermocouple
+MAX6675 thermoCouple2(kTypeCS2, kTypeSO, kTypeSCK); // Second thermocouple
 
 void setup() {
   Serial.begin(115200); // Initialize serial communication at 115200 baud
+
+  thermoCouple1.begin();
+  thermoCouple2.begin();
+
+  thermoCouple1.setSPIspeed(20000000);
+  thermoCouple2.setSPIspeed(20000000);
 
   tft.begin(); // Initialize the TFT display
 
@@ -60,27 +77,42 @@ void setup() {
     Serial.println("Mutex creation failed");
     while(1);
   }
+  pinMode(heatOn, OUTPUT);
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL,1,NULL);
-  xTaskCreate(&testThread, "testThread",5000, NULL, 2, NULL);
+  // xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
+  xTaskCreate(&testThread, "testThread",3000, NULL, 2, NULL);
+  xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
+
 }
 
 void loop() {}
 
-void changeInternalTemp(int newTemp){
+void changeInternalTemp(int newTemp){ // meant to update the internal sand battery temperature
   
 }
 
-void changeRoomTemp(int newTemp) {
+void changeRoomTemp(int newTemp) { // updates the room temperature variable, also checks values 
   // Print the temperature to the screen in the designated area
   // For external temp
-  if(newTemp > 100)
-    return;
   tft.setCursor(85, 105);
   tft.setTextSize(4); // Set the text size for the temperature display
-  tft.print(newTemp);
-  tft.print((char)247); // Degree symbol
-  tft.print("C");
+    if(newTemp > 37){
+      tft.print("MAX");
+      return;
+      }
+  // tft.print(newTemp);
+  if(celciusTemp){
+    tft.print(newTemp);
+    tft.print((char)247); // Degree symbol
+    tft.print("C");
+  }else{
+    float temp = (newTemp * 1.8)+32;
+    int temp2 = round(temp);
+    tft.print(temp2);
+    tft.print((char)247); // Degree symbol
+    tft.print("F");
+  }
 }
 
 void printMain(){ // prints main display
@@ -146,6 +178,64 @@ void printSettings() {
   tft.print("BACK");
 }
 
+
+// void internalTemp(void *pvParameter){
+//   while(1){
+//   delay(1000);
+//   // Read temperature from first thermocouple
+//   digitalWrite(TFT_CS, HIGH);
+//   digitalWrite(kTypeCS1, LOW); // Assert CS pin for thermocouple 1
+//   int status1 = thermoCouple1.read();
+//   float temp1 = thermoCouple1.getTemperature();
+//   digitalWrite(kTypeCS1, HIGH); // De-assert CS pin
+
+//   Serial.print("Thermocouple 1 - Status: ");
+//   Serial.print(status1);
+//   Serial.print(" Temperature: ");
+//   Serial.println(temp1);
+
+//   // Read temperature from second thermocouple
+//   digitalWrite(kTypeCS2, LOW); // Assert CS pin for thermocouple 2
+//   int status2 = thermoCouple2.read();
+//   float temp2 = thermoCouple2.getTemperature();
+//   digitalWrite(kTypeCS2, HIGH); // De-assert CS pin
+//   digitalWrite(TFT_CS,LOW);
+//   Serial.print("Thermocouple 2 - Status: ");
+//   Serial.print(status2);
+//   Serial.print(" Temperature: ");
+//   Serial.println(temp2);
+
+//   vTaskDelay(2000 / portTICK_PERIOD_MS);
+//   }
+// }
+
+void turnOnHeat(){
+Serial.println("heating");
+}
+
+void turnOffHeat(){
+Serial.println("no longer heating");
+}
+
+void heater(void *pvParameter){
+  while(1){
+
+    digitalWrite(heatOn, HIGH);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    digitalWrite(heatOn, LOW);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+
+    // if(heatingRoom){
+    //   turnOnHeat();
+    //   } else{
+    //   turnOffHeat();
+    //   }
+  }
+
+
+}
+
 void touchInterface(void *pvParameter){
   while(1){
       if(ft6336u.read_td_status()){ // if touched
@@ -157,15 +247,32 @@ void touchInterface(void *pvParameter){
         Serial.print(y);
         Serial.println(")");
 
-      if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) { // wrapping screenStatus stuff in mutex apparently
-        if (x >= 20 && x <= 160 && y >= 50 && y <= 125 && screenStatus == 0) {
-          screenStatus = 1; // global variable set to settings screen
-          printSettings(); // uses function to print the settings screen to the display
+      if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) { // wrapping screenStatus stuff in mutex
+      // Serial.println(screenStatus);
+        if(screenStatus ==0){
+          if (x <= 100 && x >= 0 && y <= 173 && y >= 0) {
+            // screenStatus = 1; // global variable set to settings screen
+            // printSettings(); // uses function to print the settings screen to the display
+            Serial.println("Settings Button");
+          }
+          if(x <= 100 && x >= 0 && y > 173 && y<= 280){
+            Serial.println("Start/Stop Charing");
+          }
+          if(x <= 100 && x >= 0 && y > 280 && y <= 480){
+            Serial.println("Start/Stop Heating");
+          }
+          if(x > 138 && x < 259 && y > 58 && y < 200) // toggle external temp measurement
+            celciusTemp = !celciusTemp;
+            changeRoomTemp(roomTemp);
+            Serial.println("change temperature");
         }
-
-        if(x <= 80 && x >= 0 && y <= 400 && y >= 276 && screenStatus == 1) {
-          screenStatus = 0; // set screen status back to main display
-          printMain(); // main screen GUI is then printed to the screen
+        if(screenStatus == 1){
+          // if statements for the settings screens
+          if(x <= 100 && x >= 0 && y <= 173 && y >= 0) {
+            screenStatus = 0; // set screen status back to main display
+            Serial.println("Settings Button");
+            printMain(); // main screen GUI is then printed to the screen
+          }
         }
         // Release the mutex after modifying screenStatus
         xSemaphoreGive(xMutex);
@@ -176,31 +283,30 @@ void touchInterface(void *pvParameter){
   }
 }
 
-void testThread(void *pvParameter){ // this makes no fucking sense
+void testThread(void *pvParameter){ // reading external temperature
 // esp_task_wdt_delete(NULL);
   while(1){
     int temp1 = dht1.readTemperature();
     int temp2 = dht2.readTemperature();
-    int avgTemp = (temp1 + temp2) /2;
-    
-    // Print stack usage for debugging
-    UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-    Serial.print("DHT High Water Mark: ");
-    Serial.println(uxHighWaterMark);
+    roomTemp = (temp1 + temp2) /2;
+    Serial.println(roomTemp);
+    Serial.println(celciusTemp);
 
-    // Serial.print("temp1 - ");
+    // Serial.print("DHT #1: ");
     // Serial.println(temp1);
 
-    // Serial.print("temp2 - ");
+    // Serial.print("DHT #2: ");
     // Serial.println(temp2);
-
-    // Serial.print("Average temperature value: ");
-    // Serial.print(avgTemp);
+    
+    // Print stack usage for debugging
+    // UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+    // Serial.print("DHT High Water Mark: ");
+    // Serial.println(uxHighWaterMark);
 
     // Lock the mutex before accessing screenStatus
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0)
-        changeRoomTemp(avgTemp); // update the value on the screen with the average value
+        changeRoomTemp(roomTemp); // update the value on the screen with the average value
       // Release the mutex after reading screenStatus
       xSemaphoreGive(xMutex);
     }
