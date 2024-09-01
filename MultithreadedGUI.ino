@@ -32,6 +32,8 @@
 
 // Pin definitions for power control
 #define heatOn 32
+#define heatOff 27
+#define powerPin 33
 
 SemaphoreHandle_t xMutex;
 
@@ -42,8 +44,10 @@ int temp1 = 0;
 int temp2 = 0;
 bool celciusTemp = true;
 
+bool heatingToggle = false;
 bool heatingRoom = false;
 
+bool chargingState = false;
 
 int screenStatus = 0; // 0 - main screeen/ 1 - settings screen
 
@@ -60,6 +64,8 @@ MAX6675 thermoCouple2(kTypeCS2, kTypeSO, kTypeSCK); // Second thermocouple
 void setup() {
   Serial.begin(115200); // Initialize serial communication at 115200 baud
   pinMode(heatOn, OUTPUT);
+  pinMode(heatOff, OUTPUT);
+  pinMode(powerPin,OUTPUT);
 
   thermoCouple1.begin();
   thermoCouple2.begin();
@@ -213,20 +219,37 @@ void printSettings() {
 void turnOnHeat(){
   heatingRoom = true;
   digitalWrite(heatOn, HIGH);
+  delay(10000);
+  digitalWrite(heatOn, LOW);
 }
 
 void turnOffHeat(){
   heatingRoom = false;
-  digitalWrite(heatOn, LOW);
+  digitalWrite(heatOff, HIGH);
+  delay(10000);
+  digitalWrite(heatOff, LOW);
+}
+
+void chargeFunction(){
+  if(chargingState){
+    digitalWrite(powerPin, HIGH);
+  }else{
+    digitalWrite(powerPin, LOW);
+  }
 }
 
 void heater(void *pvParameter){ // responsible for heat scheduling
   while(1){
-    if(heatingRoom){
-      turnOnHeat();
-      } else{
-      turnOffHeat();
-      }
+    if(heatingToggle){
+      if(heatingRoom){
+        Serial.println("turning on heating");
+        turnOnHeat();
+        } else{
+          Serial.println("turning off heating");
+        turnOffHeat();
+        }
+    }
+      heatingToggle = false;
     vTaskDelay(500  / portTICK_PERIOD_MS);
 
   }
@@ -253,11 +276,14 @@ void touchInterface(void *pvParameter){
             // printSettings(); // uses function to print the settings screen to the display
             Serial.println("Settings Button");
           }
-          if(x <= 100 && x >= 0 && y > 173 && y<= 280){
+          if(x < 100 && x > 0 && y > 173 && y< 280){ // toggles charging state of battery
+            chargingState = !chargingState;
+            chargeFunction();
             Serial.println("Start/Stop Charing");
           }
-          if(x <= 100 && x >= 0 && y > 280 && y <= 480){ // toggles heating
+          if(x < 100 && x > 0 && y > 280 && y < 480){ // toggles heating
             Serial.println("Start/Stop Heating");
+            heatingToggle = true; // toggle so heating loop only runs once
             heatingRoom = !heatingRoom;
             
           }
