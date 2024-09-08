@@ -56,8 +56,12 @@ int screenStatus = 0;  // 0 - main screeen/ 1 - settings screen
 
 int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingTimeMinutes = 0;     // Heating time
 int chargingTimeHour1 = 0, chargingTimeHour2 = 0, chargingTimeMinutes = 0;  // Charging time
-int maxTemp = 36;                                                           // Temperature range
+int minTemp = 20, maxTemp = 36; // Temperature range
 bool isCelsius = true;                                                      // Temperature scale
+
+// Variables to track selected field
+enum SelectedField { NONE, CHARGING_TIME1, CHARGING_TIME2, HEATING_TIME1, HEATING_TIME2, TEMPERATURE_RANGE, TEMPERATURE_SCALE };
+SelectedField selectedField = NONE;
 
 // Creating two DHT11 instances, one for each sensor
 DHT11 dht1(DHTPIN);
@@ -110,6 +114,354 @@ void setup() {
 
 void loop() {}
 
+// void displaySettingsScreen() {
+//   tft.fillScreen(TFT_WHITE); // Fill the screen with white color
+//   tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK); // Background
+  
+//   tft.drawSmoothRoundRect(15, 225, 20, 19, 140, 75, TFT_WHITE); // Save button
+//   tft.drawSmoothRoundRect(165, 225, 20, 19, 70, 75, TFT_WHITE); // Up button
+//   tft.drawSmoothRoundRect(245, 225, 20, 19, 70, 75, TFT_WHITE); // Down button
+//   tft.drawSmoothRoundRect(325, 225, 20, 19, 140, 75, TFT_WHITE); // Back button
+
+//   // Settings title
+//   tft.setTextSize(2); // Set the text size
+//   tft.setCursor(132, 12); // Set cursor position for title
+//   tft.print("/// USER SETTINGS");
+
+//   // Highlight charging time field if selected
+//   if (selectedField == CHARGING_TIME1) {
+//     tft.drawRect(190, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+//     }  else if (selectedField == CHARGING_TIME2){
+//         tft.drawRect(320, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+//     }
+
+//   // Editable fields
+//   tft.setTextSize(2); // Set the text size
+//   tft.setCursor(20, 50); // Set cursor position for charging time
+//   tft.print("CHARGING TIME:");
+//   tft.setCursor(195, 45);
+//   tft.setTextSize(3); // Set the text size
+//   tft.print(chargingTimeHour1);
+//   tft.print(":");
+//   tft.print("00");
+//   tft.print(" - ");
+//   tft.print(chargingTimeHour2);
+//   tft.print(":");
+//   tft.print("00");
+
+//   // Highlight heating time field if selected
+//   if (selectedField == HEATING_TIME1) {
+//     tft.drawRect(190, 85, 90, 33, TFT_YELLOW); // Highlight heating time
+//   } else if (selectedField == HEATING_TIME2){
+//         tft.drawRect(320, 85, 92, 33, TFT_YELLOW); // Highlight charging time
+//     }
+
+//   tft.setTextSize(2); // Set the text size
+//   tft.setCursor(20, 95); // Set cursor position for heating time
+//   tft.print("HEATING TIME:");
+//   tft.setCursor(195, 90);
+//   tft.setTextSize(3); // Set the text size
+//   tft.print(heatingTimeHour1);
+//   tft.print(":");
+//   tft.print("00");
+//   tft.print(" - ");
+//   tft.print(heatingTimeHour2);
+//   tft.print(":");
+//   tft.print("00");
+
+//   // Highlight temperature range if selected
+//   if (selectedField == TEMPERATURE_RANGE) {
+//     tft.drawRect(270, 130, 90, 33, TFT_YELLOW); // Highlight temperature range
+//   }
+
+//   tft.setTextSize(2); // Set the text size
+//   tft.setCursor(20, 140); // Set cursor position for temperature range
+//   tft.print("AMBIENT TEMPERATURE:");
+//   tft.setTextSize(3); // Set the text size for the buttons
+//   tft.setCursor(280, 135);
+//   tft.print(minTemp);
+//   tft.print((char)247); // Degree symbol
+//   tft.print(isCelsius ? "C" : "F");
+
+//   // Highlight temperature scale if selected
+//   if (selectedField == TEMPERATURE_SCALE) {
+//     tft.drawRect(245, 172, 42, 33, TFT_YELLOW); // Highlight temperature scale
+//   }
+
+//   tft.setTextSize(2); // Set the text size
+//   tft.setCursor(20, 185); // Set cursor position for temperature scale
+//   tft.print("TEMPERATURE SCALE:");
+//   tft.setTextSize(3); // Set the text size for the buttons
+//   tft.setCursor(250, 180);
+//   tft.print((char)247); // Degree symbol
+//   tft.print(isCelsius ? "C" : "F");
+
+//   tft.setTextSize(2); // Set the text size for the buttons
+//   tft.setCursor(65, 255); // Set cursor position for settings
+//   tft.print("SAVE");
+//   tft.setCursor(191, 255); // Set cursor position for settings
+//   tft.print("UP");
+//   tft.setCursor(258, 255); // Set cursor position for settings
+//   tft.print("DOWN");
+//   tft.setCursor(375, 255); // Set cursor position for Start/Stop
+//   tft.print("BACK");
+// }
+
+void editTime(int &hours) { 
+  // This function will allow the user to edit the time
+  hours = (hours + 1) % 24; // Example logic to increment hours
+}
+
+void editTemperatureRange() {
+  if (minTemp < maxTemp)
+      minTemp = minTemp + 1;
+  else if (minTemp > maxTemp) 
+      minTemp = maxTemp; // Example logic to reset
+}
+
+void toggleTemperatureScale() {
+  if (isCelsius) {
+    // Convert to Fahrenheit with rounding
+    minTemp = round((minTemp * 9 / 5) + 32);
+    maxTemp = round((maxTemp * 9 / 5) + 32);
+  } else {
+    // Convert back to Celsius with rounding
+    minTemp = round((minTemp - 32) * 5.0 / 9.0);
+    maxTemp = round((maxTemp - 32) * 5.0 / 9.0);
+  }
+  isCelsius = !isCelsius; // Toggle the scale
+  updateSelectedArea(); // Update the display with the new scale
+}
+
+// Function to highlight selected area without changing values
+void highlightSelectedArea() {
+    switch (selectedField) {
+        case CHARGING_TIME1:
+            tft.drawRect(190, 40, 93, 33, TFT_YELLOW);
+            break;
+        case CHARGING_TIME2:
+            tft.drawRect(320, 40, 92, 33, TFT_YELLOW);
+            break;
+        case HEATING_TIME1:
+            tft.drawRect(190, 85, 93, 33, TFT_YELLOW);
+            break;
+        case HEATING_TIME2:
+            tft.drawRect(320, 85, 92, 33, TFT_YELLOW);
+            break;
+        case TEMPERATURE_RANGE:
+            tft.drawRect(270, 130, 90, 33, TFT_YELLOW);
+            break;
+        case TEMPERATURE_SCALE:
+            tft.drawRect(245, 172, 42, 33, TFT_YELLOW);
+            break;
+        default:
+            break;
+    }
+}
+
+void clearPreviousHighlight() {
+  switch (selectedField) {
+    case CHARGING_TIME1:
+      tft.drawRect(190, 40, 93, 33, TFT_BLACK); // Clear charging time 1 highlight
+      break;
+    case CHARGING_TIME2:
+      tft.drawRect(320, 40, 92, 33, TFT_BLACK); // Clear charging time 2 highlight
+      break;
+    case HEATING_TIME1:
+      tft.drawRect(190, 85, 93, 33, TFT_BLACK); // Clear heating time 1 highlight
+      break;
+    case HEATING_TIME2:
+      tft.drawRect(320, 85, 92, 33, TFT_BLACK); // Clear heating time 2 highlight
+      break;
+    case TEMPERATURE_RANGE:
+      tft.drawRect(270, 130, 90, 33, TFT_BLACK); // Clear temperature range highlight
+      break;
+    case TEMPERATURE_SCALE:
+      tft.drawRect(245, 172, 42, 33, TFT_BLACK); // Clear temperature scale highlight
+      break;
+    default:
+      break;
+  }
+}
+
+void updateSelectedArea() {
+    switch (selectedField) {
+        case CHARGING_TIME1:
+            // Clear the area and redraw the updated time
+            tft.fillRect(190, 40, 93, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(195, 45);
+            tft.print(chargingTimeHour1);
+            tft.print(":00");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(100);
+            break;
+
+        case CHARGING_TIME2:
+            // Clear the area and redraw the updated time
+            tft.fillRect(320, 40, 92, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(325, 45);
+            tft.print(chargingTimeHour2);
+            tft.print(":00");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(100);
+            break;
+
+            case HEATING_TIME1:
+            // Clear the area and redraw the updated time
+            tft.fillRect(190, 85, 93, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(195, 90);
+            tft.print(heatingTimeHour1);
+            tft.print(":00");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(100);
+            break;
+
+        case HEATING_TIME2:
+            // Clear the area and redraw the updated time
+            tft.fillRect(320, 85, 92, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(325, 90);
+            tft.print(heatingTimeHour2);
+            tft.print(":00");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(100);
+            break;
+
+        case TEMPERATURE_RANGE:
+            // Clear the area and redraw the updated temperature range
+            tft.fillRect(270, 130, 90, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(280, 135);
+            tft.print(minTemp);
+            tft.print((char)247); // Degree symbol
+            tft.print(isCelsius ? "C" : "F");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(50);
+            break;
+
+        case TEMPERATURE_SCALE:
+            // Clear the area and redraw the updated temperature scale
+            tft.fillRect(245, 172, 42, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(250, 180);
+            tft.print((char)247); // Degree symbol
+            tft.print(isCelsius ? "C" : "F");
+            tft.fillRect(270, 130, 90, 33, TFT_BLACK);
+            tft.setTextSize(3);
+            tft.setCursor(280, 135);
+            tft.print(minTemp);
+            tft.print((char)247); // Degree symbol
+            tft.print(isCelsius ? "C" : "F");
+            highlightSelectedArea(); // Ensure the area remains highlighted
+            delay(50);
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Increase the value of the selected field
+void increaseValue() {
+  switch (selectedField) {
+    case CHARGING_TIME1:
+      chargingTimeHour1 = (chargingTimeHour1 + 1) % 24;
+      updateSelectedArea();
+      break;
+    case CHARGING_TIME2:
+      chargingTimeHour2 = (chargingTimeHour2 + 1) % 24;
+      updateSelectedArea();
+      break;
+    case HEATING_TIME1:
+      heatingTimeHour1 = (heatingTimeHour1 + 1) % 24;
+      updateSelectedArea();
+      break;
+    case HEATING_TIME2:
+      heatingTimeHour2 = (heatingTimeHour2 + 1) % 24;
+      updateSelectedArea();
+      break;
+    case TEMPERATURE_RANGE:
+      if (isCelsius) {
+      // For Celsius scale, limit minTemp to maxTemp and ensure it doesn't exceed 36°C
+      if (minTemp < 36) {
+        minTemp++;
+      }
+      // Ensure maxTemp stays within the range (max 36°C)
+      if (maxTemp < 36) {
+        maxTemp++;
+      }
+      } else {
+        // For Fahrenheit scale, limit minTemp to maxTemp and ensure it doesn't exceed 96°F
+        if (minTemp < 96) {
+          minTemp++;
+        }
+        // Ensure maxTemp stays within the range (max 96°F)
+        if (maxTemp < 96) {
+          maxTemp++;
+        }
+      }
+      updateSelectedArea();
+      break;
+    case TEMPERATURE_SCALE:
+      toggleTemperatureScale();
+      break;
+    default:
+      break;
+  }
+}
+
+// Decrease the value of the selected field
+void decreaseValue() {
+  switch (selectedField) {
+    case CHARGING_TIME1:
+      chargingTimeHour1 = (chargingTimeHour1 - 1 + 24) % 24;
+      updateSelectedArea();
+      break;
+    case CHARGING_TIME2:
+      chargingTimeHour2 = (chargingTimeHour2 - 1 + 24) % 24;
+      updateSelectedArea();
+      break;
+    case HEATING_TIME1:
+      heatingTimeHour1 = (heatingTimeHour1 - 1 + 24) % 24;
+      updateSelectedArea();
+      break;
+    case HEATING_TIME2:
+      heatingTimeHour2 = (heatingTimeHour2 - 1 + 24) % 24;
+      updateSelectedArea();
+      break;
+    case TEMPERATURE_RANGE:
+      if (isCelsius) {
+      // For Celsius scale, limit minTemp between 20°C and maxTemp
+      if (minTemp > 20) {
+        minTemp--;
+      }
+      // Ensure maxTemp is not less than minTemp and does not exceed 36°C
+      if (maxTemp > 36) {
+        maxTemp--;
+      }
+      } else {
+        // For Fahrenheit scale, limit minTemp between 68°F and maxTemp
+        if (minTemp > 68) {
+          minTemp--;
+        }
+        // Ensure maxTemp is not less than minTemp and does not exceed 96°F
+        if (maxTemp > 96) {
+          maxTemp--;
+        }
+      }
+      updateSelectedArea();
+      break;
+    case TEMPERATURE_SCALE:
+      toggleTemperatureScale();
+      break;
+    default:
+      break;
+  }
+}
+
 void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature
 }
 
@@ -142,91 +494,125 @@ void printMain() {                         // prints main display
   tft.fillScreen(TFT_BLACK);               // Fill the screen with black color
   tft.setTextColor(TFT_WHITE, TFT_BLACK);  // Set the text color to white with a black background
 
-  // Draw a simple shape on the screen for testing
-  tft.fillCircle(130, 120, 80, TFT_BLUE);   // Draw a blue circle in the center
-  tft.drawCircle(130, 120, 81, TFT_WHITE);  // Draw a white circle line
-  tft.fillCircle(130, 120, 73, TFT_BLACK);  // Draw a black circle in the center of the blue circle
-  tft.drawCircle(130, 120, 74, TFT_WHITE);  // Draw a white circle line
-  tft.fillCircle(350, 120, 80, TFT_RED);    // Draw a red circle in the center
-  tft.drawCircle(350, 120, 81, TFT_WHITE);  // Draw a white circle line
-  tft.fillCircle(350, 120, 73, TFT_BLACK);  // Draw a black circle in the center of the red circle
-  tft.drawCircle(350, 120, 74, TFT_WHITE);  // Draw a white circle line
+  tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK); // Background
+  tft.fillCircle(130, 120, 81, TFT_BLUE); // External temp circle
+  tft.fillCircle(130, 120, 72, TFT_BLACK); // Inner black circle
+  tft.fillCircle(350, 120, 81, TFT_RED); // Internal temp/battery circle
+  tft.fillCircle(350, 120, 72, TFT_BLACK); // Inner black circle
 
-  tft.drawSmoothRoundRect(20, 225, 20, 19, 140, 75, TFT_WHITE);   // first button
-  tft.drawSmoothRoundRect(170, 225, 20, 19, 140, 75, TFT_WHITE);  // second button
-  tft.drawSmoothRoundRect(320, 225, 20, 19, 140, 75, TFT_WHITE);  // third button
+  tft.drawSmoothRoundRect(20, 225, 20, 19, 140, 75, TFT_WHITE); // First button
+  tft.drawSmoothRoundRect(170, 225, 20, 19, 140, 75, TFT_WHITE); // Second button
+  tft.drawSmoothRoundRect(320, 225, 20, 19, 140, 75, TFT_WHITE); // Third button
 
-  tft.setTextSize(2);      // Set the text size for the buttons
-  tft.setCursor(43, 255);  // Set cursor position for settings
+  //Title project name
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(52, 12); // Set cursor position for title
+  tft.print("/// THERMAL DUNE ENERGY STORAGE");
+
+  tft.setTextSize(2); // Set the text size for the buttons
+  tft.setCursor(43, 255); // Set cursor position for settings
   tft.print("Settings");
-  tft.setCursor(181, 245);  // Set cursor position for Start/Stop Charging
+  tft.setCursor(181, 245); // Set cursor position for Start/Stop
   tft.print("Start/Stop");
-  tft.setCursor(195, 265);  // Set cursor position for Start/Stop Charging
+  tft.setCursor(195, 265); // Set cursor position for Charging
   tft.print("Charging");
-  tft.setCursor(332, 245);  // Set cursor position for Start/Stop Heating
+  tft.setCursor(332, 245); // Set cursor position for Start/Stop
   tft.print("Start/Stop");
-  tft.setCursor(350, 265);  // Set cursor position for Start/Stop Heating
+  tft.setCursor(350, 265); // Set cursor position for Heating
   tft.print("Heating");
+
 }
 
 void printSettings() {
-  tft.fillScreen(TFT_WHITE);                         // Fill the screen with white color
-  tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK);  // Background
+  tft.fillScreen(TFT_WHITE); // Fill the screen with white color
+  tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK); // Background
+  
+  tft.drawSmoothRoundRect(15, 225, 20, 19, 140, 75, TFT_WHITE); // Save button
+  tft.drawSmoothRoundRect(165, 225, 20, 19, 70, 75, TFT_WHITE); // Up button
+  tft.drawSmoothRoundRect(245, 225, 20, 19, 70, 75, TFT_WHITE); // Down button
+  tft.drawSmoothRoundRect(325, 225, 20, 19, 140, 75, TFT_WHITE); // Back button
 
-  tft.drawSmoothRoundRect(70, 225, 20, 19, 140, 75, TFT_WHITE);   // First button
-  tft.drawSmoothRoundRect(270, 225, 20, 19, 140, 75, TFT_WHITE);  // Second button
-
-  //Settings title
-  tft.setTextSize(2);      // Set the text size
-  tft.setCursor(132, 12);  // Set cursor position for title
+  // Settings title
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(132, 12); // Set cursor position for title
   tft.print("/// USER SETTINGS");
 
-  // Editable fields
-  tft.setTextSize(2);     // Set the text size
-  tft.setCursor(20, 45);  // Set cursor position for charging time
-  tft.print("Charging Time: ");
-  tft.fillRect(200, 43, 180, 20, TFT_BLACK);
-  tft.setCursor(210, 45);
-  tft.print(chargingTimeHour1);
-  tft.print(":");
-  tft.print(chargingTimeMinutes);
-  tft.print(" - ");
-  tft.print(chargingTimeHour1);
-  tft.print(":");
-  tft.print(chargingTimeMinutes);
+  // Highlight charging time field if selected
+  if (selectedField == CHARGING_TIME1) {
+    tft.drawRect(190, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+    }  else if (selectedField == CHARGING_TIME2){
+        tft.drawRect(320, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+    }
 
-  tft.setCursor(20, 90);  // Set cursor position for heating time
-  tft.print("Heating Time: ");
-  tft.fillRect(200, 88, 150, 20, TFT_BLACK);
-  tft.setCursor(210, 90);
+  // Editable fields
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(20, 50); // Set cursor position for charging time
+  tft.print("CHARGING TIME:");
+  tft.setCursor(195, 45);
+  tft.setTextSize(3); // Set the text size
+  tft.print(chargingTimeHour1);
+  tft.print(":");
+  tft.print("00");
+  tft.print(" - ");
+  tft.print(chargingTimeHour2);
+  tft.print(":");
+  tft.print("00");
+
+  // Highlight heating time field if selected
+  if (selectedField == HEATING_TIME1) {
+    tft.drawRect(190, 85, 90, 33, TFT_YELLOW); // Highlight heating time
+  } else if (selectedField == HEATING_TIME2){
+        tft.drawRect(320, 85, 92, 33, TFT_YELLOW); // Highlight charging time
+    }
+
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(20, 95); // Set cursor position for heating time
+  tft.print("HEATING TIME:");
+  tft.setCursor(195, 90);
+  tft.setTextSize(3); // Set the text size
   tft.print(heatingTimeHour1);
   tft.print(":");
-  tft.print(heatingTimeMinutes);
+  tft.print("00");
   tft.print(" - ");
   tft.print(heatingTimeHour2);
   tft.print(":");
-  tft.print(heatingTimeMinutes);
+  tft.print("00");
 
-  tft.setCursor(20, 135);  // Set cursor position for temperature range
-  tft.print("Ambient Temperature: ");
-  tft.fillRect(270, 133, 100, 20, TFT_BLACK);
+  // Highlight temperature range if selected
+  if (selectedField == TEMPERATURE_RANGE) {
+    tft.drawRect(270, 130, 90, 33, TFT_YELLOW); // Highlight temperature range
+  }
+
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(20, 140); // Set cursor position for temperature range
+  tft.print("AMBIENT TEMPERATURE:");
+  tft.setTextSize(3); // Set the text size for the buttons
   tft.setCursor(280, 135);
-  tft.print(maxTemp);
-  tft.print(" ");
+  tft.print(minTemp);
+  tft.print((char)247); // Degree symbol
   tft.print(isCelsius ? "C" : "F");
-  tft.print((char)247);  // Degree symbol
 
-  tft.setCursor(20, 180);  // Set cursor position for temperature scale
-  tft.print("Temperature Scale: ");
-  tft.fillRect(240, 178, 50, 20, TFT_BLACK);
+  // Highlight temperature scale if selected
+  if (selectedField == TEMPERATURE_SCALE) {
+    tft.drawRect(245, 172, 42, 33, TFT_YELLOW); // Highlight temperature scale
+  }
+
+  tft.setTextSize(2); // Set the text size
+  tft.setCursor(20, 185); // Set cursor position for temperature scale
+  tft.print("TEMPERATURE SCALE:");
+  tft.setTextSize(3); // Set the text size for the buttons
   tft.setCursor(250, 180);
+  tft.print((char)247); // Degree symbol
   tft.print(isCelsius ? "C" : "F");
-  tft.print((char)247);  // Degree symbol
 
-  tft.setTextSize(2);       // Set the text size for the buttons
-  tft.setCursor(118, 255);  // Set cursor position for settings
+  tft.setTextSize(2); // Set the text size for the buttons
+  tft.setCursor(65, 255); // Set cursor position for settings
   tft.print("SAVE");
-  tft.setCursor(318, 255);  // Set cursor position for Start/Stop
+  tft.setCursor(191, 255); // Set cursor position for settings
+  tft.print("UP");
+  tft.setCursor(258, 255); // Set cursor position for settings
+  tft.print("DOWN");
+  tft.setCursor(375, 255); // Set cursor position for Start/Stop
   tft.print("BACK");
 }
 
@@ -238,19 +624,19 @@ void internalTemp(void *pvParameter){
   float temp1 = thermoCouple1.getTemperature();
 
 
-  Serial.print("Thermocouple 1 - Status: ");
-  Serial.print(status1);
-  Serial.print(" Temperature: ");
-  Serial.println(temp1);
+  // Serial.print("Thermocouple 1 - Status: ");
+  // Serial.print(status1);
+  // Serial.print(" Temperature: ");
+  // Serial.println(temp1);
 
   // Read temperature from second thermocouple
 
   int status2 = thermoCouple2.read();
   float temp2 = thermoCouple2.getTemperature();
-  Serial.print("Thermocouple 2 - Status: ");
-  Serial.print(status2);
-  Serial.print(" Temperature: ");
-  Serial.println(temp2);
+  // Serial.print("Thermocouple 2 - Status: ");
+  // Serial.print(status2);
+  // Serial.print(" Temperature: ");
+  // Serial.println(temp2);
 
   vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
@@ -310,19 +696,11 @@ void touchInterface(void *pvParameter) {
       Serial.println(")");
 
       if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {  // wrapping screenStatus stuff in mutex
-        if (screenStatus == 0 && x <= 100 && x >= 0 && y <= 173 && y >= 0) {
-          screenStatus = 1;  // global variable set to settings screen
-          printSettings();   // uses function to print the settings screen to the display
-          Serial.println("Settings Button");
-        } else if (screenStatus == 1 && y > 280 && y < 400 && x < 100) {
-          screenStatus = 0;
-          printMain();
-        }
         if (screenStatus == 0) {
           if (x < 100 && x > 0 && y > 173 && y < 280) {  // toggles charging state of battery
             chargingState = !chargingState;
             chargeFunction();
-            Serial.println("Start/Stop Charing");
+            Serial.println("Start/Stop Charging");
           }
           if (x < 100 && x > 0 && y > 280 && y < 480) {  // toggles heating
             Serial.println("Start/Stop Heating");
@@ -334,14 +712,48 @@ void touchInterface(void *pvParameter) {
           changeRoomTemp(roomTemp);
           Serial.println("change temperature");
         }
-        if (screenStatus == 1) {
-          if (y > 80 && y < 200 && x < 100) {
-            Serial.println("Save Button");
-          }
-          if (x > 240 && x < 260 && y < 243 && y > 216) {
-            Serial.println("start temp");
+        if (screenStatus == 1) { // in the settings screen
+          clearPreviousHighlight(); // Clear the previous highlight
+
+          // Check if the user clicked on one of the editable fields or buttons
+          if (x >= 230 && x <= 255 && y >= 195 && y <= 265) { // Charging Time
+            selectedField = CHARGING_TIME1;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 240 && x <= 285 && y >= 325 && y <= 385) { // Charging Time
+            selectedField = CHARGING_TIME2;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 195 && x <= 210 && y >= 195 && y <= 260) { // Heating Time
+            selectedField = HEATING_TIME1;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 195 && x <= 215 && y >= 330 && y <= 395) { // Charging Time
+            selectedField = HEATING_TIME2;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 155 && x <= 165 && y >= 280 && y <= 355) { // Temperature Range
+            selectedField = TEMPERATURE_RANGE;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 115 && x <= 125 && y >= 255 && y <= 285) { // Temperature Scale
+            selectedField = TEMPERATURE_SCALE;
+            highlightSelectedArea(); // Highlight without changing values
+          } else if (x >= 15 && x <= 90 && y >= 32 && y <= 155) { // Save Button
+            Serial.println("Settings saved");
+          } else if (x >= 15 && x <= 90 && y >= 180 && y <= 225) { // Up Button
+            increaseValue();
+            Serial.println("Up");
+          } else if (x >= 15 && x <= 90 && y >= 255 && y <= 310) { // Down Button
+            decreaseValue();
+            Serial.println("Down");
+          } else if (x >= 15 && x <= 90 && y >= 335 && y <= 450) { // Back Button
+            Serial.println("Back to previous screen");
           }
         }
+        if (screenStatus == 0 && x <= 100 && x >= 0 && y <= 173 && y >= 0) { // press settigns button
+          screenStatus = 1;  // global variable set to settings screen
+          printSettings();   // uses function to print the settings screen to the display
+          Serial.println("Settings Button");
+      } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
+          screenStatus = 0;
+          printMain();
+      }
         // Release the mutex after modifying screenStatus
         xSemaphoreGive(xMutex);
       }
