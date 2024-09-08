@@ -19,9 +19,9 @@
 #define TFT_RST 4  // Or set to -1 if connected to ESP32 reset line
 
 // Pin definitions for FT6336U touch controller
-#define CPT_SDA 21
-#define CPT_SCL 22
-#define CPT_RST 32 // 12 -> 32
+#define CPT_SDA 21 // 5kohm pull up resistor
+#define CPT_SCL 22 // 5kohm pull up resistor
+#define CPT_RST 32
 #define CPT_INT 13
 
 // SPI connection for k-type thermocouple
@@ -31,9 +31,12 @@
 #define kTypeSCK 14  // SCK pin for the thermocouple (use the same as HSPI_CLK) 18 -> 14
 
 // Pin definitions for power control, instantiated as basic output pins in the set up
-#define heatOn 32
+#define heatOn 17 // changed GPIO 35 to 17
 #define heatOff 27
 #define powerPin 33
+
+// #define TOUCH_RESET_TIMEOUT 5000
+
 
 SemaphoreHandle_t xMutex;
 
@@ -77,8 +80,11 @@ void setup() {
   thermoCouple1.begin();
   thermoCouple2.begin();
 
-  // thermoCouple1.setSPIspeed(20000000);
-  // thermoCouple2.setSPIspeed(20000000);
+    // Initialize I2C bus with the SDA and SCL pins
+  // Wire.begin(CPT_SDA, CPT_SCL);
+
+  // // Reduce the I2C speed to 100kHz for more stable communication
+  // Wire.setClock(1000000);  // 100kHz I2C speed
 
   tft.begin();  // Initialize the TFT display
 
@@ -228,7 +234,6 @@ void printSettings() {
 void internalTemp(void *pvParameter){
   while(1){
   // Read temperature from first thermocouple
-
   int status1 = thermoCouple1.read();
   float temp1 = thermoCouple1.getTemperature();
 
@@ -276,11 +281,12 @@ void chargeFunction() {
 }
 
 void heater(void *pvParameter) {  // responsible for heat scheduling
+turnOffHeat(); // make sure default state is to off
   while (1) {
     if (heatingToggle) {
       if (heatingRoom) {
         Serial.println("turning on heating");
-        turnOnHeat();
+        turnOnHeat(); // TEMPORARILY DISABLED FOR THE TIME BEING PLEASE RETURN HERE SOON
       } else {
         Serial.println("turning off heating");
         turnOffHeat();
@@ -292,11 +298,12 @@ void heater(void *pvParameter) {  // responsible for heat scheduling
 }
 
 void touchInterface(void *pvParameter) {
+
   while (1) {
     if (ft6336u.read_td_status()) {  // if touched
       int x = ft6336u.read_touch1_x();
       int y = ft6336u.read_touch1_y();
-      Serial.print("FT6336U Touch Position 1: (");  // has the coordinates
+      Serial.print("FT6336U Touch Position 1: (");
       Serial.print(x);
       Serial.print(" , ");
       Serial.print(y);
@@ -311,7 +318,6 @@ void touchInterface(void *pvParameter) {
           screenStatus = 0;
           printMain();
         }
-        // Serial.println(screenStatus);
         if (screenStatus == 0) {
           if (x < 100 && x > 0 && y > 173 && y < 280) {  // toggles charging state of battery
             chargingState = !chargingState;
@@ -339,8 +345,7 @@ void touchInterface(void *pvParameter) {
         // Release the mutex after modifying screenStatus
         xSemaphoreGive(xMutex);
       }
-
-      vTaskDelay(500 / portTICK_PERIOD_MS);
+      vTaskDelay(200 / portTICK_PERIOD_MS);
     }
   }
 }
