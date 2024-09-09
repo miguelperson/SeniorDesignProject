@@ -113,7 +113,7 @@ void setup() {
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL, 1, NULL);
   xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
-  xTaskCreate(&testThread, "testThread", 3000, NULL, 2, NULL);
+  // xTaskCreate(&testThread, "testThread", 3000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
 }
 
@@ -573,30 +573,26 @@ void internalTemp(void *pvParameter){
   float temp2 = thermoCouple2.getTemperature();
   internalTemp2 = temp2;
 
-  avgInternalTemp = (internalTemp1 + internalTemp2) / 2;
-  // changeInternalTemp(avgInternalTemp);
+  int roomTemp1 = dht1.readTemperature();
+  int roomTemp2 = dht2.readTemperature();
+  roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
 
-    if (showBattery) { // THIS PART OF THE CODE IS BROUGHT IN TO SIMPLIFY AND WILL NEED A MUTEX AT SOME POINT 
-    // Display battery percentage
-    int batteryPercent = 100; // Example battery percentage
-    tft.setCursor(305, 105);
-    tft.print(batteryPercent);
-    tft.print("%");
-  } else {
-    // Display internal temperature
-    // int temp = dht.readTemperature();
-      tft.setCursor(305, 105);
-      tft.print(newTemp);
-      tft.print((char)247); // Degree symbol
-      tft.print("C");
-    
-  }
+  avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+  // changeInternalTemp(avgInternalTemp);
+    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+      if(screenStatus == 0){
+        changeInternalTemp(avgInternalTemp);
+        changeRoomTemp(roomTemp);
+      }
+      xSemaphoreGive(xMutex);
+
+      }
   // Serial.print("Thermocouple 2 - Status: ");
   // Serial.print(status2);
   // Serial.print(" Temperature: ");
   // Serial.println(temp2);
 
-  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
 
@@ -673,14 +669,14 @@ void touchInterface(void *pvParameter) {
             heatingToggle = true;  // toggle so heating loop only runs once
             heatingRoom = !heatingRoom;
           }
-          if(y < 440 && y > 280 && x > 117 && x > 350){
+          if(y < 440 && y > 280 && x < 277 && x > 110){
             Serial.println("toggle internal temperature");
             showBattery = !showBattery;
           }
-          // if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
-          //   celciusTemp = !celciusTemp;
+          if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
+            // celciusTemp = !celciusTemp;
           // changeRoomTemp(roomTemp);
-          // Serial.println("change temperature");
+          Serial.println("change temperature");
         }
         if (screenStatus == 1) { // in the settings screen
           clearPreviousHighlight(); // Clear the previous highlight
@@ -736,38 +732,38 @@ void touchInterface(void *pvParameter) {
   }
 }
 
-void testThread(void *pvParameter) {  // reading external temperature
-                                      // esp_task_wdt_delete(NULL);
-  while (1) {
-    int temp1 = dht1.readTemperature();
-    int temp2 = dht2.readTemperature();
-    roomTemp = (temp1 + temp2) / 2;
-    // Serial.println(roomTemp);
-    // Serial.println(celciusTemp);
+// void testThread(void *pvParameter) {  // reading external temperature
+//                                       // esp_task_wdt_delete(NULL);
+//   while (1) {
+//     int temp1 = dht1.readTemperature();
+//     int temp2 = dht2.readTemperature();
+//     roomTemp = (temp1 + temp2) / 2;
+//     // Serial.println(roomTemp);
+//     // Serial.println(celciusTemp);
 
-    // Serial.print("DHT #1: ");
-    // Serial.println(temp1);
+//     // Serial.print("DHT #1: ");
+//     // Serial.println(temp1);
 
-    // Serial.print("DHT #2: ");
-    // Serial.println(temp2);
+//     // Serial.print("DHT #2: ");
+//     // Serial.println(temp2);
 
-    // Print stack usage for debugging
-    // UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-    // Serial.print("DHT High Water Mark: ");
-    // Serial.println(uxHighWaterMark);
+//     // Print stack usage for debugging
+//     // UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+//     // Serial.print("DHT High Water Mark: ");
+//     // Serial.println(uxHighWaterMark);
 
-    // Lock the mutex before accessing screenStatus
-    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-      if (screenStatus == 0)
-        changeRoomTemp(roomTemp);  // update the value on the screen with the average value
-      // Release the mutex after reading screenStatus
-      xSemaphoreGive(xMutex);
-    }
+//     // Lock the mutex before accessing screenStatus
+//     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+//       if (screenStatus == 0)
+//         changeRoomTemp(roomTemp);  // update the value on the screen with the average value
+//       // Release the mutex after reading screenStatus
+//       xSemaphoreGive(xMutex);
+//     }
 
-   // Ensure the task yields or waits for a short period
-    vTaskDelay(1000 / portTICK_PERIOD_MS);  // Adjust the delay as needed
+//    // Ensure the task yields or waits for a short period
+//     vTaskDelay(1000 / portTICK_PERIOD_MS);  // Adjust the delay as needed
 
-    // Add a task watchdog reset or call taskYIELD()
-    // esp_task_wdt_feed();  // This replaces the previous WDT reset function
-  }
-}
+//     // Add a task watchdog reset or call taskYIELD()
+//     // esp_task_wdt_feed();  // This replaces the previous WDT reset function
+//   }
+// }
