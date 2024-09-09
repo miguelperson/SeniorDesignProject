@@ -381,18 +381,24 @@ void decreaseValue() {
 void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature  tft.setTextSize(4);
   if (showBattery) {
     // Display battery percentage
-    int batteryPercent = 100; // Example battery percentage
+    float batteryPercent = (((float)newTemp - 37) / 463) * 100; // Example battery percentage
+    int roundedPercent = batteryPercent;
     tft.setCursor(305, 105);
-    tft.print(batteryPercent);
+    tft.print(roundedPercent);
     tft.print("%");
   } else {
-    // Display internal temperature
-    // int temp = dht.readTemperature();
-      tft.setCursor(305, 105);
-      tft.print(newTemp);
-      tft.print((char)247); // Degree symbol
-      tft.print("C");
-    
+      if(isCelsius){
+        tft.setCursor(305, 105);
+        tft.print(newTemp);
+        tft.print((char)247); // Degree symbol
+        tft.print("C");
+      }else{
+        float temp = (newTemp * 1.8) + 32;
+        int temp2 = round(temp);
+        tft.print(temp2);
+        tft.print((char)247);  // Degree symbol
+        tft.print("F");
+        }
   }
 }
 
