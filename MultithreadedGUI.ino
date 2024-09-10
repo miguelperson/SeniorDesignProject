@@ -63,7 +63,7 @@ int finalStartHeating = 0;
 int finalEndHeating = 0;
 int finalStartCharging = 0;
 int finalEndCharging = 0;
-int finalTemp = 0;
+int finalTemp = 20; // preferred room temperature
 
 // all these variables are basically temporary
 int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingTimeMinutes = 0;     // Heating time
@@ -87,8 +87,8 @@ MAX6675 thermoCouple2(kTypeCS2, kTypeSO, kTypeSCK);  // Second thermocouple
 
 void setup() {
   Serial.begin(115200);  // Initialize serial communication at 115200 baud
-    pinMode(kTypeSO, INPUT);  // Set GPIO12 as input initially to avoid conflicts during boot
-
+  
+  pinMode(kTypeSO, INPUT);  // Set GPIO12 as input initially to avoid conflicts during boot
   pinMode(heatOn, OUTPUT);
   pinMode(heatOff, OUTPUT);
   pinMode(powerPin, OUTPUT);
@@ -97,7 +97,6 @@ void setup() {
   thermoCouple2.begin();
 
   tft.begin();  // Initialize the TFT display
-
   ft6336u.begin();  // Initialize the FT6336U touch controller
   printMain();
 
@@ -113,12 +112,10 @@ void setup() {
 
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL, 1, NULL);
   xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
-  // xTaskCreate(&testThread, "testThread", 3000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
 }
 
 void loop() {}
-
 
 void editTime(int &hours) { 
   // This function will allow the user to edit the time
@@ -205,9 +202,10 @@ void updateSelectedArea() {
             tft.setTextSize(3);
             tft.setCursor(195, 45);
             tft.print(chargingTimeHour1);
-            tft.print(":00");
+            tft.print(":");
+            tft.print("00");
             highlightSelectedArea(); // Ensure the area remains highlighted
-            delay(100);
+            delay(50);
             break;
 
         case CHARGING_TIME2:
@@ -216,9 +214,10 @@ void updateSelectedArea() {
             tft.setTextSize(3);
             tft.setCursor(325, 45);
             tft.print(chargingTimeHour2);
-            tft.print(":00");
+            tft.print(":");
+            tft.print("00");
             highlightSelectedArea(); // Ensure the area remains highlighted
-            delay(100);
+            delay(50);
             break;
 
             case HEATING_TIME1:
@@ -227,9 +226,10 @@ void updateSelectedArea() {
             tft.setTextSize(3);
             tft.setCursor(195, 90);
             tft.print(heatingTimeHour1);
-            tft.print(":00");
+            tft.print(":");
+            tft.print("00");
             highlightSelectedArea(); // Ensure the area remains highlighted
-            delay(100);
+            delay(50);
             break;
 
         case HEATING_TIME2:
@@ -238,9 +238,10 @@ void updateSelectedArea() {
             tft.setTextSize(3);
             tft.setCursor(325, 90);
             tft.print(heatingTimeHour2);
-            tft.print(":00");
+            tft.print(":");
+            tft.print("00");
             highlightSelectedArea(); // Ensure the area remains highlighted
-            delay(100);
+            delay(50);
             break;
 
         case TEMPERATURE_RANGE:
@@ -375,10 +376,7 @@ void decreaseValue() {
   }
 }
 
-// void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature
-// }
-
-void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature  tft.setTextSize(4);
+void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature
   if (showBattery) {
     // Display battery percentage
     float batteryPercent = (((float)newTemp - 37) / 463) * 100; // Example battery percentage
@@ -386,14 +384,16 @@ void changeInternalTemp(int newTemp) {  // meant to update the internal sand bat
     tft.setCursor(305, 105);
     tft.print(roundedPercent);
     tft.print("%");
-  } else {
+  } else if (!showBattery) {
+    tft.setTextSize(4);  // Set the text size for the temperature display
       if(isCelsius){
-        tft.setCursor(305, 105);
+        tft.setCursor(300, 105);
         tft.print(newTemp);
         tft.print((char)247); // Degree symbol
         tft.print("C");
       }else{
         float temp = (newTemp * 1.8) + 32;
+        tft.setCursor(300, 105);
         int temp2 = round(temp);
         tft.print(temp2);
         tft.print((char)247);  // Degree symbol
@@ -411,7 +411,7 @@ void changeRoomTemp(int newTemp) {  // updates the room temperature variable, al
     tft.print("MAX");
     return;
   }
-  // tft.print(newTemp);
+
   if (isCelsius) {
     tft.print(newTemp);
     tft.print((char)247);  // Degree symbol
@@ -428,9 +428,8 @@ void changeRoomTemp(int newTemp) {  // updates the room temperature variable, al
 void printMain() {                         // prints main display
   tft.setRotation(1);                      // Set the orientation. Adjust as needed (0-3)
   tft.invertDisplay(true);                 // Invert display colors
-  tft.fillScreen(TFT_BLACK);               // Fill the screen with black color
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);  // Set the text color to white with a black background
-
+  
+  tft.fillScreen(TFT_WHITE); // Fill the screen with white color
   tft.fillRoundRect(5, 5, 470, 310, 25, TFT_BLACK); // Background
   tft.fillCircle(130, 120, 81, TFT_BLUE); // External temp circle
   tft.fillCircle(130, 120, 72, TFT_BLACK); // Inner black circle
@@ -457,12 +456,10 @@ void printMain() {                         // prints main display
   tft.print("Start/Stop");
   tft.setCursor(350, 265); // Set cursor position for Heating
   tft.print("Heating");
-
 }
 
 void printSettings() {
-
-    heatingTimeHour1 = finalStartHeating;
+  heatingTimeHour1 = finalStartHeating;
   heatingTimeHour2 = finalEndHeating;
   chargingTimeHour1 = finalStartCharging;
   chargingTimeHour2 = finalEndCharging;
@@ -568,13 +565,7 @@ void internalTemp(void *pvParameter){
   float temp1 = thermoCouple1.getTemperature();
   internalTemp1 = temp1;
 
-  // Serial.print("Thermocouple 1 - Status: ");
-  // Serial.print(status1);
-  // Serial.print(" Temperature: ");
-  // Serial.println(temp1);
-
   // Read temperature from second thermocouple
-
   int status2 = thermoCouple2.read();
   float temp2 = thermoCouple2.getTemperature();
   internalTemp2 = temp2;
@@ -584,7 +575,6 @@ void internalTemp(void *pvParameter){
   roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
 
   avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
-  // changeInternalTemp(avgInternalTemp);
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0){
         changeInternalTemp(avgInternalTemp);
@@ -593,10 +583,6 @@ void internalTemp(void *pvParameter){
       xSemaphoreGive(xMutex);
 
       }
-  // Serial.print("Thermocouple 2 - Status: ");
-  // Serial.print(status2);
-  // Serial.print(" Temperature: ");
-  // Serial.println(temp2);
 
   vTaskDelay(500 / portTICK_PERIOD_MS);
   }
@@ -677,6 +663,7 @@ void touchInterface(void *pvParameter) {
           }
           if(y < 440 && y > 280 && x < 277 && x > 110){
             Serial.println("toggle internal temperature");
+            tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
           }
           if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
@@ -737,39 +724,3 @@ void touchInterface(void *pvParameter) {
     }
   }
 }
-
-// void testThread(void *pvParameter) {  // reading external temperature
-//                                       // esp_task_wdt_delete(NULL);
-//   while (1) {
-//     int temp1 = dht1.readTemperature();
-//     int temp2 = dht2.readTemperature();
-//     roomTemp = (temp1 + temp2) / 2;
-//     // Serial.println(roomTemp);
-//     // Serial.println(celciusTemp);
-
-//     // Serial.print("DHT #1: ");
-//     // Serial.println(temp1);
-
-//     // Serial.print("DHT #2: ");
-//     // Serial.println(temp2);
-
-//     // Print stack usage for debugging
-//     // UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-//     // Serial.print("DHT High Water Mark: ");
-//     // Serial.println(uxHighWaterMark);
-
-//     // Lock the mutex before accessing screenStatus
-//     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-//       if (screenStatus == 0)
-//         changeRoomTemp(roomTemp);  // update the value on the screen with the average value
-//       // Release the mutex after reading screenStatus
-//       xSemaphoreGive(xMutex);
-//     }
-
-//    // Ensure the task yields or waits for a short period
-//     vTaskDelay(1000 / portTICK_PERIOD_MS);  // Adjust the delay as needed
-
-//     // Add a task watchdog reset or call taskYIELD()
-//     // esp_task_wdt_feed();  // This replaces the previous WDT reset function
-//   }
-// }
