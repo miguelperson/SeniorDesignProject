@@ -3,8 +3,12 @@
 #include <Wire.h>
 #include <FT6336U.h>
 #include <DHT11.h>  // Include the DHT library
-// #include "esp_task_wdt.h
 #include "MAX6675.h"
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <DNSServer.h>
+#include <Preferences.h>
+#include <HTTPClient.h>
 
 // Pin definitions for DHT11
 #define DHTPIN 5    // Pin connected to the first DHT11 data pin
@@ -34,9 +38,6 @@
 #define heatOn 17 // changed GPIO 35 to 17
 #define heatOff 27
 #define powerPin 33
-
-// #define TOUCH_RESET_TIMEOUT 5000
-
 
 SemaphoreHandle_t xMutex;
 
@@ -85,6 +86,27 @@ TFT_eSPI tft = TFT_eSPI();  // Create a TFT_eSPI object
 MAX6675 thermoCouple1(kTypeCS1, kTypeSO, kTypeSCK);  // First thermocouple
 MAX6675 thermoCouple2(kTypeCS2, kTypeSO, kTypeSCK);  // Second thermocouple
 
+const char* apSSID = "TDES_Configuration";  // Name of the AP network
+const char* apPassword = "12345678";  // Password for the AP network
+const byte DNS_PORT = 53;
+IPAddress apIP(192, 168, 4, 1);  // IP address for the AP
+
+// Structure to hold SSID and RSSI for networks
+struct WiFiNetwork {
+  String ssid;
+  int rssi;
+};
+
+// Array to store the top 3 Wi-Fi networks
+WiFiNetwork networks[3]; 
+
+DNSServer dnsServer;
+AsyncWebServer server(80);
+Preferences preferences;
+
+TaskHandle_t wifiTaskHandle = NULL; // task handles are used to delete the tasks when needed
+TaskHandle_t dataSendTaskHandle = NULL;
+
 void setup() {
   Serial.begin(115200);  // Initialize serial communication at 115200 baud
   
@@ -109,7 +131,29 @@ void setup() {
   }
   pinMode(kTypeSO, INPUT_PULLUP);  // Configure GPIO12 for MISO after boot
 
+      WiFi.setAutoReconnect(false);
+    WiFi.disconnect(true); // Disconnect from any saved networks and clear credentials in RAM
+    // Create handles DNS server things for the instance of an
+    xTaskCreatePinnedToCore(
+        wifiTask,          // Task function
+        "WiFiTask",        // Name of the task
+        16384,              // Stack size in bytes
+        NULL,              // Task input parameter
+        1,                 // Task priority
+        &wifiTaskHandle,   // Task handle
+        1                  // Core to run the task on (core 1)
+    );
 
+      // Create task to connect to webserver
+    xTaskCreatePinnedToCore(
+        sendDataTask,     // Task function
+        "SendData",       // Name of the task
+        4096,             // Stack size in bytes
+        NULL,             // Task input parameter
+        1,                // Task priority
+        &dataSendTaskHandle, // Task handle
+        1                 // Core to run the task on (core 1)
+    );
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL, 1, NULL);
   xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
@@ -557,6 +601,151 @@ void printSettings() {
   tft.print("BACK");
 }
 
+void startAccessPoint() {
+    WiFi.softAP(apSSID, apPassword);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+    Serial.println("Access Point started");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.softAPIP());
+
+    // Start DNS server to redirect all requests to the AP IP address
+    dnsServer.start(DNS_PORT, "*", apIP);
+
+    // Setup web server routes for captive portal detection and configuration page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", generateHTML());
+    });
+
+    server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", generateHTML());  // For Android captive portal
+    });
+
+    server.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/html", generateHTML());  // For iOS captive portal
+    });
+
+    server.on("/submit", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String ssid = request->getParam("ssid", true)->value();
+        String password = request->getParam("password", true)->value();
+        saveCredentials(ssid, password);
+        request->send(200, "text/html", "Credentials saved. Attempting to connect to Wi-Fi...");
+        delay(2000);  // Short delay before restarting
+        ESP.restart();
+    });
+    server.begin();
+    Serial.println("Web server started");
+}
+
+void connectToWiFiTask() {
+    
+    preferences.begin("wifi-creds", false); // gets log in information
+    String ssid = preferences.getString("ssid", "");
+    String password = preferences.getString("password", "");
+    preferences.end();
+
+    WiFi.mode(WIFI_STA); // mode to connect to WiFi
+    WiFi.begin(ssid.c_str(), password.c_str()); // runs to connect to the Wifi
+
+    Serial.print("Connecting to Wi-Fi");
+    int attemptCount = 0;
+    while (WiFi.status() != WL_CONNECTED) { // this is the time out code for when its trying to connect
+        delay(1000);
+        Serial.print(".");
+        if (++attemptCount > 10) {
+            Serial.println("Failed to connect. Starting AP mode.");
+            clearCredentials(); // if disconnects for too long will just clear the credentials
+            startAccessPoint(); // Fall back to AP mode if connection fails
+            vTaskDelete(NULL);  // Delete this task
+        }
+    }
+
+    Serial.println();
+    Serial.println("Connected to Wi-Fi!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+}
+
+void sendDataToMongoDB() {
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        String serverPath = "http://your-mongodb-api-url"; // Replace with your actual MongoDB API endpoint
+
+        // Create the JSON data you want to send
+        String jsonData = "{\"temperature\": 24.5, \"humidity\": 60}"; // Example JSON data
+
+        http.begin(serverPath);
+        http.addHeader("Content-Type", "application/json");
+
+        int httpResponseCode = http.POST(jsonData);
+
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            Serial.println(httpResponseCode);
+            Serial.println(response);
+        } else {
+            Serial.print("Error on sending POST: ");
+            Serial.println(httpResponseCode);
+        }
+
+        http.end();
+    } else {
+        Serial.println("Wi-Fi not connected. Unable to send data.");
+    }
+}
+
+String generateHTML() {
+    String html = "<!DOCTYPE html><html><head><title>WiFi Setup</title></head><body>";
+    html += "<h1>ESP32 Wi-Fi Setup</h1>";
+    html += "<form action='/submit' method='post'>";
+    html += "SSID: <input type='text' name='ssid'><br>";
+    html += "Password: <input type='password' name='password'><br>";
+    html += "<input type='submit' value='Save'>";
+    html += "</form>";
+    html += "</body></html>";
+    return html;
+}
+
+void saveCredentials(const String& ssid, const String& password) {
+    preferences.begin("wifi-creds", false);
+    preferences.putString("ssid", ssid);
+    preferences.putString("password", password);
+    preferences.end();
+    Serial.println("Wi-Fi credentials saved to preferences.");
+}
+
+void clearCredentials() {
+    preferences.begin("wifi-creds", false);
+    preferences.remove("ssid");
+    preferences.remove("password");
+    preferences.end();
+    Serial.println("Wi-Fi credentials cleared from preferences.");
+}
+
+void wifiTask(void *parameter) {
+    while (true) {
+        dnsServer.processNextRequest();  // Handle DNS requests for captive portal
+        delay(10);  // Yield to allow other tasks to run
+    }
+}
+
+void sendDataTask(void *parameter) {
+  int counter = 0;
+
+    while (true) {
+      if(WiFi.status() == WL_CONNECTED){
+        Serial.println("Connected to the internet!");
+        Serial.print(counter);
+        ++counter;
+        // sendDataToMongoDB(); // sending information to webserver
+        vTaskDelay(15000 / portTICK_PERIOD_MS);  // Send data every 30 seconds
+      }else{ // no longer connected to the internet
+              // Create a task to connect to Wi-Fi
+        connectToWiFiTask();
+        // vTaskDelete(NULL);  // Delete this task
+      }
+
+    }
+}
 
 void internalTemp(void *pvParameter){
   while(1){
