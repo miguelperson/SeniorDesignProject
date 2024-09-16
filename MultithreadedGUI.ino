@@ -9,6 +9,7 @@
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <HTTPClient.h>
+#include <time.h>
 
 // Pin definitions for DHT11
 #define DHTPIN 5    // Pin connected to the first DHT11 data pin
@@ -38,6 +39,9 @@
 #define heatOn 17 // changed GPIO 35 to 17
 #define heatOff 27
 #define powerPin 33
+
+#define MY_NTP_SERVER "at.pool.ntp.org"
+#define MY_TZ "EST5EDT,M3.2.0,M11.1.0"
 
 SemaphoreHandle_t xMutex;
 
@@ -107,8 +111,21 @@ Preferences preferences;
 TaskHandle_t wifiTaskHandle = NULL; // task handles are used to delete the tasks when needed
 TaskHandle_t dataSendTaskHandle = NULL;
 
+time_t now;                          // this are the seconds since Epoch (1970) - UTC
+tm tm; // more convenient way for the time
+
 void setup() {
   Serial.begin(115200);  // Initialize serial communication at 115200 baud
+
+    #ifdef ARDUINO_ARCH_ESP32
+  // ESP32 seems to be a little more complex:
+  configTime(0, 0, MY_NTP_SERVER);  // 0, 0 because we will use TZ in the next line
+  setenv("TZ", MY_TZ, 1);            // Set environment variable with your time zone
+  tzset();
+  #else
+  // ESP8266
+  configTime(MY_TZ, MY_NTP_SERVER);    // --> for the ESP8266 only
+  #endif
   
   pinMode(kTypeSO, INPUT);  // Set GPIO12 as input initially to avoid conflicts during boot
   pinMode(heatOn, OUTPUT);
@@ -126,37 +143,20 @@ void setup() {
 
   if (xMutex == NULL) {
     Serial.println("Mutex creation failed");
-    while (1)
-      ;
+    while (1);
   }
   pinMode(kTypeSO, INPUT_PULLUP);  // Configure GPIO12 for MISO after boot
 
       WiFi.setAutoReconnect(false);
     WiFi.disconnect(true); // Disconnect from any saved networks and clear credentials in RAM
     // Create handles DNS server things for the instance of an
-    xTaskCreatePinnedToCore(
-        wifiTask,          // Task function
-        "WiFiTask",        // Name of the task
-        16384,              // Stack size in bytes
-        NULL,              // Task input parameter
-        1,                 // Task priority
-        &wifiTaskHandle,   // Task handle
-        1                  // Core to run the task on (core 1)
-    );
-
-      // Create task to connect to webserver
-    xTaskCreatePinnedToCore(
-        sendDataTask,     // Task function
-        "SendData",       // Name of the task
-        4096,             // Stack size in bytes
-        NULL,             // Task input parameter
-        1,                // Task priority
-        &dataSendTaskHandle, // Task handle
-        1                 // Core to run the task on (core 1)
-    );
+    
+  xTaskCreatePinnedToCore(wifiTask,"WiFiTask",4096,NULL,1,&wifiTaskHandle,1); 
+  xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,1,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
   xTaskCreate(&touchInterface, "touchInterface", 1512, NULL, 1, NULL);
   xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
+  xTaskCreate(&showTime,"showTime",2048, NULL, 1, NULL);
 }
 
 void loop() {}
@@ -425,6 +425,7 @@ void changeInternalTemp(int newTemp) {  // meant to update the internal sand bat
     // Display battery percentage
     float batteryPercent = (((float)newTemp - 37) / 463) * 100; // Example battery percentage
     int roundedPercent = batteryPercent;
+    tft.setTextSize(4);  // Set the text size for the temperature display
     tft.setCursor(305, 105);
     tft.print(roundedPercent);
     tft.print("%");
@@ -487,7 +488,7 @@ void printMain() {                         // prints main display
   //Title project name
   tft.setTextSize(2); // Set the text size
   tft.setCursor(52, 12); // Set cursor position for title
-  tft.print("/// THERMAL DUNE ENERGY STORAGE");
+  // tft.print("/// THERMAL DUNE ENERGY STORAGE");
 
   tft.setTextSize(2); // Set the text size for the buttons
   tft.setCursor(43, 255); // Set cursor position for settings
@@ -600,6 +601,59 @@ void printSettings() {
   tft.setCursor(375, 255); // Set cursor position for Start/Stop
   tft.print("BACK");
 }
+
+void showTime(void *parameter){
+  while(true){
+    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+      if(screenStatus== 0){
+        time(&now); // read the current time
+        localtime_r(&now, &tm);             // update the structure tm with the current time
+        tft.setTextSize(2); // Set the text size
+        // tft.fillRect(52, 12, 190, 30, TFT_BLACK);
+        tft.setCursor(52, 12); // Set cursor position for title
+        if(tm.tm_sec == 59 || tm.tm_sec == 0)
+          tft.fillRect(52, 12, 300, 25, TFT_BLACK);
+
+        tft.print(tm.tm_hour);           // hours since midnight 0-23
+        tft.print(":");
+        tft.print(tm.tm_min);            // minutes after the hour 0-59
+        tft.print(":");
+        tft.print(tm.tm_sec);            // seconds after the minute 0-61*
+        tft.println();
+
+      }
+      xSemaphoreGive(xMutex);    
+    }
+    vTaskDelay(250 / portTICK_PERIOD_MS);
+  }
+}
+
+// void showTime(void *parameter){
+//   while(true){
+//     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+//       if(screenStatus== 0){
+//         time(&now); // read the current time
+//         localtime_r(&now, &tm);             // update the structure tm with the current time
+//         tft.setTextSize(2); // Set the text size
+//         tft.fillRect(52, 12, 190, 25, TFT_BLACK);
+//         tft.setCursor(52, 12); // Set cursor position for title
+//         tft.print(tm.tm_hour);           // hours since midnight 0-23
+//         tft.print(":");
+//         tft.print(tm.tm_min);            // minutes after the hour 0-59
+//         tft.print(":");
+//         tft.print(tm.tm_sec);            // seconds after the minute 0-61
+//         if (tm.tm_isdst == 1)               // Daylight Saving Time flag
+//           tft.print(" DST");
+//         else
+//           tft.print(" Standard");
+//         tft.println();
+
+//       }
+//       xSemaphoreGive(xMutex);
+//     }
+//     vTaskDelay(1000 / portTICK_PERIOD_MS);
+//   }
+// }
 
 void startAccessPoint() {
     WiFi.softAP(apSSID, apPassword);
