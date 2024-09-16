@@ -58,6 +58,7 @@ int avgInternalTemp = 0;
 
 bool heatingToggle = false;
 bool heatingRoom = false;
+bool charging = false;
 bool showBattery = false; // Flag for battery
 
 bool chargingState = false;
@@ -628,32 +629,6 @@ void showTime(void *parameter){
   }
 }
 
-// void showTime(void *parameter){
-//   while(true){
-//     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-//       if(screenStatus== 0){
-//         time(&now); // read the current time
-//         localtime_r(&now, &tm);             // update the structure tm with the current time
-//         tft.setTextSize(2); // Set the text size
-//         tft.fillRect(52, 12, 190, 25, TFT_BLACK);
-//         tft.setCursor(52, 12); // Set cursor position for title
-//         tft.print(tm.tm_hour);           // hours since midnight 0-23
-//         tft.print(":");
-//         tft.print(tm.tm_min);            // minutes after the hour 0-59
-//         tft.print(":");
-//         tft.print(tm.tm_sec);            // seconds after the minute 0-61
-//         if (tm.tm_isdst == 1)               // Daylight Saving Time flag
-//           tft.print(" DST");
-//         else
-//           tft.print(" Standard");
-//         tft.println();
-
-//       }
-//       xSemaphoreGive(xMutex);
-//     }
-//     vTaskDelay(1000 / portTICK_PERIOD_MS);
-//   }
-// }
 
 void startAccessPoint() {
     WiFi.softAP(apSSID, apPassword);
