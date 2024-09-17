@@ -58,10 +58,10 @@ int avgInternalTemp = 0;
 
 bool heatingToggle = false;
 bool heatingRoom = false;
-bool charging = false;
+// bool charging = false;
 bool showBattery = false; // Flag for battery
 
-bool chargingState = false;
+bool chargingState = false; // false means not charging
 
 int screenStatus = 0;  // 0 - main screeen/ 1 - settings screen
 
@@ -753,7 +753,7 @@ void clearCredentials() {
 void wifiTask(void *parameter) {
     while (true) {
         dnsServer.processNextRequest();  // Handle DNS requests for captive portal
-        delay(10);  // Yield to allow other tasks to run
+        vTaskDelay(10 / portTICK_PERIOD_MS);  // Send data every 30 seconds
     }
 }
 
