@@ -54,11 +54,9 @@ int temp2 = 0;
 int internalTemp1 = 0;
 int internalTemp2 = 0;
 int avgInternalTemp = 0;
-// bool celciusTemp = true;
 
-bool heatingToggle = false;
-bool heatingRoom = false;
-// bool charging = false;
+bool heatingToggle = false; // going to retire this variable
+bool heatingRoom = false; // true is heating false is not heating room
 bool showBattery = false; // Flag for battery
 
 bool chargingState = false; // false means not charging
@@ -132,6 +130,7 @@ void setup() {
   pinMode(heatOn, OUTPUT);
   pinMode(heatOff, OUTPUT);
   pinMode(powerPin, OUTPUT);
+  digitalWrite(heatOff, LOW);
 
   thermoCouple1.begin();
   thermoCouple2.begin();
@@ -684,6 +683,8 @@ void connectToWiFiTask() {
             Serial.println("Failed to connect. Starting AP mode.");
             clearCredentials(); // if disconnects for too long will just clear the credentials
             startAccessPoint(); // Fall back to AP mode if connection fails
+            // xTaskCreate(startAccessPointTask, "startAccessPointTask", 8192, NULL, 1, NULL); // Start the AP mode if connection fails
+
             vTaskDelete(NULL);  // Delete this task
         }
     }
@@ -766,7 +767,7 @@ void sendDataTask(void *parameter) {
         Serial.print(counter);
         ++counter;
         // sendDataToMongoDB(); // sending information to webserver
-        vTaskDelay(15000 / portTICK_PERIOD_MS);  // Send data every 30 seconds
+        vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
               // Create a task to connect to Wi-Fi
         connectToWiFiTask();
@@ -797,6 +798,9 @@ void internalTemp(void *pvParameter){
       if(screenStatus == 0){
         changeInternalTemp(avgInternalTemp);
         changeRoomTemp(roomTemp);
+        // Serial.println(tm.tm_hour);
+        // Serial.println(tm.tm_min);
+        // Serial.println(tm.tm_sec);
       }
       xSemaphoreGive(xMutex);
 
@@ -808,18 +812,20 @@ void internalTemp(void *pvParameter){
 
 void turnOnHeat() {
   heatingRoom = true;
+  digitalWrite(heatOff, LOW);
   digitalWrite(heatOn, HIGH);
-  delay(15000);
-  digitalWrite(heatOn, LOW);
+  // delay(15000);
+  // digitalWrite(heatOn, LOW);
 }
 
 void turnOffHeat() {
   heatingRoom = false;
+  digitalWrite(heatOn, LOW);
   digitalWrite(heatOff, HIGH);
-  delay(15000);
-  delay(10000);
-  delay(10000);
-  digitalWrite(heatOff, LOW);
+  // delay(15000);
+  // delay(10000);
+  // delay(10000);
+  // digitalWrite(heatOff, LOW);
 }
 
 void chargeFunction() {
@@ -830,19 +836,19 @@ void chargeFunction() {
   }
 }
 
-void heater(void *pvParameter) {  // responsible for heat scheduling
+void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
     while (1) {
-      if (heatingToggle) {
-        if (heatingRoom) {
+        if (tm.tm_hour == 19 && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating
           Serial.println("turning on heating");
+          // turnOffHeat();
           turnOnHeat(); // TEMPORARILY DISABLED FOR THE TIME BEING PLEASE RETURN HERE SOON
         } else {
           Serial.println("turning off heating");
           turnOffHeat();
         }
-      }
-      heatingToggle = false;
+      
+
       vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
@@ -853,6 +859,11 @@ void settingSave(){
   finalStartCharging = chargingTimeHour1;
   finalEndCharging = chargingTimeHour2;
   finalTemp = minTemp;
+  // Serial.println(finalStartHeating);
+  // Serial.println(finalEndHeating);
+  // Serial.println(finalStartCharging);
+  // Serial.println(finalEndCharging);
+  // Serial.println(finalTemp);
 }
 
 void touchInterface(void *pvParameter) {
