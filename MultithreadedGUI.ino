@@ -836,24 +836,34 @@ void chargeFunction() {  // function checks charging state and toggles according
   }
 }
 
-// all these variables are basically temporary
-// int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingTimeMinutes = 0;     // Heating time // +++ PLACED HERE FOR REFERENCE+++
-// int chargingTimeHour1 = 0, chargingTimeHour2 = 0, chargingTimeMinutes = 0;  // Charging time
+// int finalStartHeating = 0;
+// int finalEndHeating = 0;
+// int finalStartCharging = 0;
+// int finalEndCharging = 0;
+// int finalTemp = 20; // preferred room temperature
 
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
     while (1) {
-        if (tm.tm_hour == 19 && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating === can add another conditional statement that checks the 
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating === can add another conditional statement that checks the 
           Serial.println("turning on heating");
           turnOnHeat();
         }
 
-        if(tm.tm_hour == 19 && tm.tm_min == 2 && tm.tm_sec == 1){
+        if(tm.tm_hour == finalEndHeating && tm.tm_min == 2 && tm.tm_sec == 1){
           Serial.println("scheduling off for heating");
           turnOffHeat();
         }
 
-        if()
+        if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
+          chargingState = true;
+          chargeFunction();
+        }
+
+        if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+          chargingState = false;
+          chargeFunction();
+        }
       
 
       vTaskDelay(500 / portTICK_PERIOD_MS);
