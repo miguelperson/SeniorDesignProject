@@ -758,7 +758,7 @@ void wifiTask(void *parameter) {
     }
 }
 
-void sendDataTask(void *parameter) {
+void sendDataTask(void *parameter) { // this functionn is going to handle everything webserver related
   int counter = 0;
 
     while (true) {
@@ -828,7 +828,7 @@ void turnOffHeat() {
   // digitalWrite(heatOff, LOW);
 }
 
-void chargeFunction() {
+void chargeFunction() {  // function checks charging state and toggles according to whats needed
   if (chargingState) {
     digitalWrite(powerPin, HIGH);
   } else {
@@ -836,17 +836,24 @@ void chargeFunction() {
   }
 }
 
+// all these variables are basically temporary
+// int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingTimeMinutes = 0;     // Heating time // +++ PLACED HERE FOR REFERENCE+++
+// int chargingTimeHour1 = 0, chargingTimeHour2 = 0, chargingTimeMinutes = 0;  // Charging time
+
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
     while (1) {
-        if (tm.tm_hour == 19 && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating
+        if (tm.tm_hour == 19 && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating === can add another conditional statement that checks the 
           Serial.println("turning on heating");
-          // turnOffHeat();
-          turnOnHeat(); // TEMPORARILY DISABLED FOR THE TIME BEING PLEASE RETURN HERE SOON
-        } else {
-          Serial.println("turning off heating");
+          turnOnHeat();
+        }
+
+        if(tm.tm_hour == 19 && tm.tm_min == 2 && tm.tm_sec == 1){
+          Serial.println("scheduling off for heating");
           turnOffHeat();
         }
+
+        if()
       
 
       vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -881,14 +888,17 @@ void touchInterface(void *pvParameter) {
       if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {  // wrapping screenStatus stuff in mutex
         if (screenStatus == 0) {
           if (x < 100 && x > 0 && y > 173 && y < 320) {  // toggles charging state of battery
-            chargingState = !chargingState;
+            chargingState = !chargingState; // toggles charging state and calls charge function
             chargeFunction();
             Serial.println("Start/Stop Charging");
           }
           if (x < 100 && x > 0 && y > 320 && y < 480) {  // toggles heating
             Serial.println("Start/Stop Heating");
-            heatingToggle = true;  // toggle so heating loop only runs once
-            heatingRoom = !heatingRoom;
+            if(heatingRoom){
+              turnOffHeat();
+            } else if(!heatingRoom){
+              turnOnHeat();
+            }
           }
           if(y < 440 && y > 280 && x < 277 && x > 110){
             Serial.println("toggle internal temperature");
