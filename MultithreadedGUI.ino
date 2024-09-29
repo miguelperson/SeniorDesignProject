@@ -65,9 +65,13 @@ bool chargingState = false; // false means not charging
 int screenStatus = 0;  // 0 - main screeen/ 1 - settings screen
 
 int finalStartHeating = 0;
+int startHeatingMin = 0;
 int finalEndHeating = 0;
+int endHeatingMin = 0;
 int finalStartCharging = 0;
+int startChargingMin = 0;
 int finalEndCharging = 0;
+int endChargingMin = 0;
 int finalTemp = 20; // preferred room temperature
 
 // all these variables are basically temporary
@@ -113,6 +117,8 @@ TaskHandle_t dataSendTaskHandle = NULL;
 
 time_t now;                          // this are the seconds since Epoch (1970) - UTC
 tm tm; // more convenient way for the time
+
+String batteryID = "TDES1";
 
 void setup() {
   Serial.begin(115200);  // Initialize serial communication at 115200 baud
@@ -828,7 +834,6 @@ void turnOffHeat() {
 }
 
 void chargeFunction() {  // function checks charging state and toggles according to whats needed
-  if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
     if (chargingState) { // if charging state set to true
       digitalWrite(powerPin, HIGH);
       chargeCircle();
@@ -836,9 +841,6 @@ void chargeFunction() {  // function checks charging state and toggles according
       digitalWrite(powerPin, LOW);
       chargeCircleClear();
     }
-    xSemaphoreGive(chargeMutex);
-
-  }
 }
 
 // Function to show that charging is ON
@@ -880,28 +882,26 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           turnOnHeat();
         }
 
-        if(tm.tm_hour == finalEndHeating && tm.tm_min == 2 && tm.tm_sec == 1){
+        if(tm.tm_hour == finalEndHeating && tm.tm_min == 2 && tm.tm_sec == 1){ // turn off at 19:02:01
           Serial.println("scheduling off for heating");
           turnOffHeat();
         }
 
-        if(avgInternalTemp < 500){ // ensuring that we don't charge past maximum limit of 500C
+        if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
-            if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
             chargingState = true;
             chargeFunction();
-            }
-
-            if(tm.tm_hour == finalEndCharging && tm.tm_min == 2 && tm.tm_sec == 1){ // checks for end charging time to toggle false
-            chargingState = false;
-            chargeFunction();
-            }
-
           xSemaphoreGive(chargeMutex);
+          }
         }
 
-
-        } // end of charging
+        if(tm.tm_hour == finalEndCharging && tm.tm_min == 2 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+          if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
+            chargingState = false;
+            chargeFunction();
+            xSemaphoreGive(chargeMutex);
+          }
+        }
       vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
@@ -936,9 +936,9 @@ void touchInterface(void *pvParameter) {
           if (x < 100 && x > 0 && y > 173 && y < 320) {  // toggles charging state of battery
             if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = !chargingState; // toggles charging state and calls charge function
+            chargeFunction();
             xSemaphoreGive(chargeMutex);
             }
-            chargeFunction();
             Serial.println("Start/Stop Charging");
           }
           if (x < 100 && x > 0 && y > 320 && y < 480) {  // toggles heating
