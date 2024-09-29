@@ -44,7 +44,7 @@
 #define MY_TZ "EST5EDT,M3.2.0,M11.1.0"
 
 SemaphoreHandle_t xMutex;
-SemaphoneHandle_t chargeMutex;
+SemaphoreHandle_t chargeMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -141,6 +141,7 @@ void setup() {
   printMain();
 
   xMutex = xSemaphoreCreateMutex();
+  chargeMutex = xSemaphoreCreateMutex();
 
   if (xMutex == NULL || chargeMutex == NULL) {
     Serial.println("Mutex creation failed");
@@ -835,6 +836,8 @@ void chargeFunction() {  // function checks charging state and toggles according
       digitalWrite(powerPin, LOW);
       chargeCircleClear();
     }
+    xSemaphoreGive(chargeMutex);
+
   }
 }
 
@@ -884,12 +887,12 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
 
         if(avgInternalTemp < 500){ // ensuring that we don't charge past maximum limit of 500C
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
-            if(tm.tm_hour == finalStartCharging && tm.tm_min == 31 && tm.tm_sec == 1){ //  checks for starting charge time
+            if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
             chargingState = true;
             chargeFunction();
             }
 
-            if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+            if(tm.tm_hour == finalEndCharging && tm.tm_min == 2 && tm.tm_sec == 1){ // checks for end charging time to toggle false
             chargingState = false;
             chargeFunction();
             }
