@@ -44,6 +44,7 @@
 #define MY_TZ "EST5EDT,M3.2.0,M11.1.0"
 
 SemaphoreHandle_t xMutex;
+SemaphoneHandle_t chargeMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -141,7 +142,7 @@ void setup() {
 
   xMutex = xSemaphoreCreateMutex();
 
-  if (xMutex == NULL) {
+  if (xMutex == NULL || chargeMutex == NULL) {
     Serial.println("Mutex creation failed");
     while (1);
   }
@@ -826,12 +827,14 @@ void turnOffHeat() {
 }
 
 void chargeFunction() {  // function checks charging state and toggles according to whats needed
-  if (chargingState) { // if charging state set to true
-    digitalWrite(powerPin, HIGH);
-    chargeCircle();
-  } else {
-    digitalWrite(powerPin, LOW);
-    chargeCircleClear();
+  if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
+    if (chargingState) { // if charging state set to true
+      digitalWrite(powerPin, HIGH);
+      chargeCircle();
+    } else {
+      digitalWrite(powerPin, LOW);
+      chargeCircleClear();
+    }
   }
 }
 
@@ -880,15 +883,20 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
         }
 
         if(avgInternalTemp < 500){ // ensuring that we don't charge past maximum limit of 500C
-            if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
+          if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
+            if(tm.tm_hour == finalStartCharging && tm.tm_min == 31 && tm.tm_sec == 1){ //  checks for starting charge time
             chargingState = true;
             chargeFunction();
             }
 
-          if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+            if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
             chargingState = false;
             chargeFunction();
-          }
+            }
+
+          xSemaphoreGive(chargeMutex);
+        }
+
 
         } // end of charging
       vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -923,7 +931,10 @@ void touchInterface(void *pvParameter) {
       if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {  // wrapping screenStatus stuff in mutex
         if (screenStatus == 0) {
           if (x < 100 && x > 0 && y > 173 && y < 320) {  // toggles charging state of battery
+            if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = !chargingState; // toggles charging state and calls charge function
+            xSemaphoreGive(chargeMutex);
+            }
             chargeFunction();
             Serial.println("Start/Stop Charging");
           }
