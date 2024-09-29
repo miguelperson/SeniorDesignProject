@@ -26,7 +26,7 @@
 // Pin definitions for FT6336U touch controller
 #define CPT_SDA 21 // 5kohm pull up resistor
 #define CPT_SCL 22 // 5kohm pull up resistor
-#define CPT_RST 32
+#define CPT_RST 32 // 32 or 23?
 #define CPT_INT 13
 
 // SPI connection for k-type thermocouple
@@ -814,26 +814,50 @@ void turnOnHeat() {
   heatingRoom = true;
   digitalWrite(heatOff, LOW);
   digitalWrite(heatOn, HIGH);
-  // delay(15000);
-  // digitalWrite(heatOn, LOW);
+  heatCircle();
+
 }
 
 void turnOffHeat() {
   heatingRoom = false;
   digitalWrite(heatOn, LOW);
   digitalWrite(heatOff, HIGH);
-  // delay(15000);
-  // delay(10000);
-  // delay(10000);
-  // digitalWrite(heatOff, LOW);
+  heatCircleClear();
 }
 
 void chargeFunction() {  // function checks charging state and toggles according to whats needed
-  if (chargingState) {
+  if (chargingState) { // if charging state set to true
     digitalWrite(powerPin, HIGH);
+    chargeCircle();
   } else {
     digitalWrite(powerPin, LOW);
+    chargeCircleClear();
   }
+}
+
+// Function to show that charging is ON
+void chargeCircle() {
+  tft.fillCircle(390, 18, 7, TFT_YELLOW); // Yellow circle
+}
+
+void chargeCircleClear(){
+    tft.fillCircle(390, 18, 7, TFT_BLACK);
+
+}
+
+// Function to show that heating is ON
+void heatCircle() {
+  tft.fillCircle(410, 18, 7, TFT_GREEN); // Green circle
+}
+
+void heatCircleClear(){
+    tft.fillCircle(410, 18, 7, TFT_BLACK);
+
+}
+
+// Function to alert that it is overheating
+void overheatingAlert() {
+  tft.fillCircle(430, 18, 7, TFT_RED); // Red circle
 }
 
 // int finalStartHeating = 0;
@@ -867,10 +891,6 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           }
 
         } // end of charging
-
-
-      
-
       vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
