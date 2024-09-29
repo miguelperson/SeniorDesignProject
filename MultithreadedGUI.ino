@@ -855,15 +855,20 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           turnOffHeat();
         }
 
-        if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
-          chargingState = true;
-          chargeFunction();
-        }
+        if(avgInternalTemp < 500){ // ensuring that we don't charge past maximum limit of 500C
+            if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
+            chargingState = true;
+            chargeFunction();
+            }
 
-        if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
-          chargingState = false;
-          chargeFunction();
-        }
+          if(tm.tm_hour == finalEndCharging && tm.tm_min == 1 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+            chargingState = false;
+            chargeFunction();
+          }
+
+        } // end of charging
+
+
       
 
       vTaskDelay(500 / portTICK_PERIOD_MS);
