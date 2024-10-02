@@ -509,6 +509,11 @@ void printMain() {                         // prints main display
   tft.print("Start/Stop");
   tft.setCursor(350, 265); // Set cursor position for Heating
   tft.print("Heating");
+
+  if(heatingRoom)
+    heatCircle();
+  if(chargingState)
+    chargeCircle();
 }
 
 void printSettings() {
