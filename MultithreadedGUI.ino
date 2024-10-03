@@ -708,18 +708,26 @@ void connectToWiFiTask() {
     Serial.println(WiFi.localIP());
 }
 
-void sendDataToMongoDB() {
+void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String serverPath = "http://your-mongodb-api-url"; // Replace with your actual MongoDB API endpoint
-
-        // Create the JSON data you want to send
-        String jsonData = "{\"temperature\": 24.5, \"humidity\": 60}"; // Example JSON data
+        String serverPath = "https://sandbattery.info/batteryUpdate"; // Replace with your actual MongoDB API endpoint
 
         http.begin(serverPath);
         http.addHeader("Content-Type", "application/json");
 
-        int httpResponseCode = http.POST(jsonData);
+        // Create the JSON data you want to send
+        // String jsonData = "{\"temperature\": 24.5, \"humidity\": 60}"; // Example JSON data
+        String jsonPayload = "{";
+        jsonPayload += "\"batteryID\":\"" + batteryID + "\",";
+        jsonPayload += "\"currentRoomTemp\":\"" + String(roomTemp) + "\",";  // Replace with actual sensor data
+        jsonPayload += "\"currentInternalTemp\":\"" + String(avgInternalTemp) + "\",";  // Replace with actual sensor data
+        jsonPayload += "\"setRoomTemp\":22,";  // Replace with actual room temperature setting 
+        jsonPayload += "\"heatingRoom\":\"" + String(heatingRoom) + "\",";
+        jsonPayload += "\"ChargingBoolean\":\"" + String(chargingState);
+        jsonPayload += "}";
+
+        int httpResponseCode = http.POST(jsonPayload); // posting new information to the 
 
         if (httpResponseCode > 0) {
             String response = http.getString();
@@ -771,6 +779,44 @@ void wifiTask(void *parameter) {
     }
 }
 
+void checkFlags(){
+      if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        String serverPath = "https://sandbattery.info/checkBattery?batteryID="+batteryID;
+
+        http.begin(serverPath);
+        int httpCode = http.GET();
+
+        if(httpCode > 0){
+          String payload = http.getString(); // stringifying the response
+          Serial.println("payload recieved"+payload);
+          StaticJsonDocument<512> doc;  // Allocate a JSON document
+          DeserializationError error = deserializeJson(doc, payload);
+
+            if (error) {
+                Serial.print(F("deserializeJson() failed: "));
+                Serial.println(error.f_str());
+                return;
+            }
+          bool heatingToggleFlag = doc["heatingToggleFlag"];
+          bool chargingToggleFlag = doc["chargingToggleFlag"];
+
+          if(heatingToggleFlag){
+            
+          }
+
+        } else{
+          Serial.print("Error sending GET request");
+          Serial.println(httpCode);
+        }
+
+
+        http.end();
+    } else {
+        Serial.println("Wi-Fi not connected. Unable to send data.");
+    }
+}
+
 void sendDataTask(void *parameter) { // this functionn is going to handle everything webserver related
   int counter = 0;
 
@@ -779,12 +825,12 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         Serial.println("Connected to the internet!");
         Serial.print(counter);
         ++counter;
-        // sendDataToMongoDB(); // sending information to webserver
+        sendBatteryUpdate(); // sending information to webserver
+        checkFlags();
         vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
-              // Create a task to connect to Wi-Fi
+        // function responsible for connecting ESP32 to internet 
         connectToWiFiTask();
-        // vTaskDelete(NULL);  // Delete this task
       }
 
     }
@@ -819,7 +865,7 @@ void internalTemp(void *pvParameter){
 
       }
 
-  vTaskDelay(500 / portTICK_PERIOD_MS);
+  vTaskDelay(250 / portTICK_PERIOD_MS);
   }
 }
 
@@ -882,12 +928,12 @@ void overheatingAlert() {
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
     while (1) {
-        if (tm.tm_hour == finalStartHeating && tm.tm_min == 1 && tm.tm_sec == 1) { // at 19:01:01 turn on the heating === can add another conditional statement that checks the 
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == 0 && tm.tm_sec == 1) { // at 19:00:01 turn on the heating === can add another conditional statement that checks the 
           Serial.println("turning on heating");
           turnOnHeat();
         }
 
-        if(tm.tm_hour == finalEndHeating && tm.tm_min == 2 && tm.tm_sec == 1){ // turn off at 19:02:01
+        if(tm.tm_hour == finalEndHeating && tm.tm_min == 0 && tm.tm_sec == 30){ // turn off at 19:00:30
           Serial.println("scheduling off for heating");
           turnOffHeat();
         }
