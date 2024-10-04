@@ -58,7 +58,7 @@ int internalTemp1 = 0;
 int internalTemp2 = 0;
 int avgInternalTemp = 0;
 
-bool heatingToggle = false; // going to retire this variable
+// bool heatingToggle = false; // going to retire this variable
 bool heatingRoom = false; // true is heating false is not heating room
 bool showBattery = false; // Flag for battery
 
@@ -724,7 +724,7 @@ void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
         jsonPayload += "\"batteryID\":\"" + batteryID + "\",";  // batteryID is a string, so keep the quotes
         jsonPayload += "\"currentRoomTemp\":" + String(roomTemp) + ",";  // numeric value, no quotes
         jsonPayload += "\"currentInternalTemp\":" + String(avgInternalTemp) + ",";  // numeric value, no quotes
-        jsonPayload += "\"setRoomTemp\":22,";  // hardcoded numeric value, no quotes
+        jsonPayload += "\"setRoomTemp\":" + String(finalTemp) + ",";  // hardcoded numeric value, no quotes
         jsonPayload += "\"heatingRoom\":" + String(heatingRoom ? "true" : "false") + ",";  // boolean value, no quotes
         jsonPayload += "\"ChargingBoolean\":" + String(chargingState ? "true" : "false");  // boolean value, no quotes
         jsonPayload += "}";
@@ -851,8 +851,8 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         Serial.println("Connected to the internet!");
         Serial.print(counter);
         ++counter;
-        sendBatteryUpdate(); // sending information to webserver
         checkFlags();
+        sendBatteryUpdate(); // sending information to webserver
         vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
         // function responsible for connecting ESP32 to internet 
@@ -876,7 +876,14 @@ void internalTemp(void *pvParameter){
 
   int roomTemp1 = dht1.readTemperature();
   int roomTemp2 = dht2.readTemperature();
-  roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
+  if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
+    roomTemp = roomTemp2;
+  }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
+    roomTemp = roomTemp1;
+  }else{
+    roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
+  }
+  Serial.println(roomTemp1+" "+roomTemp2);
 
   avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
