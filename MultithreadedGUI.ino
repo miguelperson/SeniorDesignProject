@@ -639,7 +639,7 @@ void showTime(void *parameter){
       }
       xSemaphoreGive(xMutex);    
     }
-    vTaskDelay(250 / portTICK_PERIOD_MS);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
 
@@ -784,8 +784,8 @@ void wifiTask(void *parameter) {
 void checkFlags() {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String serverPath = "https://sandbattery.info/TDESToggleCheck?batteryID=TDES1";
-        Serial.println("URL: " + serverPath);
+        String serverPath = "https://sandbattery.info/TDESToggleCheck?batteryID="+batteryID;
+        // Serial.println("URL: " + serverPath);
 
         http.begin(serverPath);
 
@@ -880,10 +880,12 @@ void internalTemp(void *pvParameter){
     roomTemp = roomTemp2;
   }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
     roomTemp = roomTemp1;
-  }else{
-    roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
+  }else if(roomTemp1 > 100 && roomTemp2 > 100){
+    roomTemp = 69;
+  } else{
+        roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
   }
-  Serial.println(roomTemp1+" "+roomTemp2);
+  // Serial.println(roomTemp1+" "+roomTemp2);
 
   avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
@@ -893,9 +895,11 @@ void internalTemp(void *pvParameter){
       }
       xSemaphoreGive(xMutex);
 
+      } else{
+        Serial.println("Temp failed to get mutex lock");
       }
 
-  vTaskDelay(250 / portTICK_PERIOD_MS);
+  vTaskDelay(750 / portTICK_PERIOD_MS);
   }
 }
 
@@ -1034,6 +1038,8 @@ void touchInterface(void *pvParameter) {
             Serial.println("toggle internal temperature");
             tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
+            changeInternalTemp(avgInternalTemp);
+
           }
           if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
             // celciusTemp = !celciusTemp;
@@ -1082,6 +1088,8 @@ void touchInterface(void *pvParameter) {
       } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
           screenStatus = 0;
           printMain();
+          changeInternalTemp(avgInternalTemp);
+          changeRoomTemp(roomTemp);
       }
         // Release the mutex after modifying screenStatus
         xSemaphoreGive(xMutex);
