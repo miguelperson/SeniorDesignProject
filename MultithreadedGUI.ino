@@ -802,7 +802,16 @@ void checkFlags(){
           bool chargingToggleFlag = doc["chargingToggleFlag"];
 
           if(heatingToggleFlag){
-            
+            if(heatingRoom){ // if heatingRoom is on then turn off
+              turnOffHeat();
+            } else{
+              turnOnHeat(); // if heating room is off then turn on
+            }
+          }
+
+          if(chargingToggleFlag){
+            chargingState != chargingState;
+            chargeFunction();
           }
 
         } else{
