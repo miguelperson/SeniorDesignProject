@@ -162,8 +162,8 @@ void setup() {
     // Create handles DNS server things for the instance of an
     
   xTaskCreatePinnedToCore(wifiTask,"WiFiTask",4096,NULL,1,&wifiTaskHandle,1); 
-  xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,1,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
-  xTaskCreate(&touchInterface, "touchInterface", 1512, NULL, 1, NULL);
+  xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,3,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
+  xTaskCreate(&touchInterface, "touchInterface", 4096, NULL, 1, NULL);
   xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
   xTaskCreate(&showTime,"showTime",2048, NULL, 1, NULL);
@@ -883,9 +883,6 @@ void internalTemp(void *pvParameter){
       if(screenStatus == 0){
         changeInternalTemp(avgInternalTemp);
         changeRoomTemp(roomTemp);
-        // Serial.println(tm.tm_hour);
-        // Serial.println(tm.tm_min);
-        // Serial.println(tm.tm_sec);
       }
       xSemaphoreGive(xMutex);
 
