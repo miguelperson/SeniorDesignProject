@@ -10,6 +10,8 @@
 #include <Preferences.h>
 #include <HTTPClient.h>
 #include <time.h>
+#include <ArduinoJson.h> 
+
 
 // Pin definitions for DHT11
 #define DHTPIN 5    // Pin connected to the first DHT11 data pin
@@ -719,12 +721,12 @@ void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
         // Create the JSON data you want to send
         // String jsonData = "{\"temperature\": 24.5, \"humidity\": 60}"; // Example JSON data
         String jsonPayload = "{";
-        jsonPayload += "\"batteryID\":\"" + batteryID + "\",";
-        jsonPayload += "\"currentRoomTemp\":\"" + String(roomTemp) + "\",";  // Replace with actual sensor data
-        jsonPayload += "\"currentInternalTemp\":\"" + String(avgInternalTemp) + "\",";  // Replace with actual sensor data
-        jsonPayload += "\"setRoomTemp\":22,";  // Replace with actual room temperature setting 
-        jsonPayload += "\"heatingRoom\":\"" + String(heatingRoom) + "\",";
-        jsonPayload += "\"ChargingBoolean\":\"" + String(chargingState);
+        jsonPayload += "\"batteryID\":\"" + batteryID + "\",";  // batteryID is a string, so keep the quotes
+        jsonPayload += "\"currentRoomTemp\":" + String(roomTemp) + ",";  // numeric value, no quotes
+        jsonPayload += "\"currentInternalTemp\":" + String(avgInternalTemp) + ",";  // numeric value, no quotes
+        jsonPayload += "\"setRoomTemp\":22,";  // hardcoded numeric value, no quotes
+        jsonPayload += "\"heatingRoom\":" + String(heatingRoom ? "true" : "false") + ",";  // boolean value, no quotes
+        jsonPayload += "\"ChargingBoolean\":" + String(chargingState ? "true" : "false");  // boolean value, no quotes
         jsonPayload += "}";
 
         int httpResponseCode = http.POST(jsonPayload); // posting new information to the 
@@ -779,52 +781,67 @@ void wifiTask(void *parameter) {
     }
 }
 
-void checkFlags(){
-      if (WiFi.status() == WL_CONNECTED) {
+void checkFlags() {
+    if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String serverPath = "https://sandbattery.info/checkBattery?batteryID="+batteryID;
+        String serverPath = "https://sandbattery.info/TDESToggleCheck?batteryID=TDES1";
+        Serial.println("URL: " + serverPath);
 
         http.begin(serverPath);
-        int httpCode = http.GET();
 
-        if(httpCode > 0){
-          String payload = http.getString(); // stringifying the response
-          Serial.println("payload recieved"+payload);
-          StaticJsonDocument<512> doc;  // Allocate a JSON document
-          DeserializationError error = deserializeJson(doc, payload);
+        int httpCode = http.GET();  // No need to add headers for GET requests
+
+        if (httpCode > 0) {
+            String payload = http.getString();  // Get the response body
+            Serial.println("Payload received: " + payload);
+
+            if (httpCode == 404) {
+                Serial.println("Battery not found (404)");
+                return;  // Stop here if the battery wasn't found
+            }
+
+            StaticJsonDocument<512> doc;
+            DeserializationError error = deserializeJson(doc, payload);
 
             if (error) {
                 Serial.print(F("deserializeJson() failed: "));
                 Serial.println(error.f_str());
                 return;
             }
-          bool heatingToggleFlag = doc["heatingToggleFlag"];
-          bool chargingToggleFlag = doc["chargingToggleFlag"];
 
-          if(heatingToggleFlag){
-            if(heatingRoom){ // if heatingRoom is on then turn off
-              turnOffHeat();
-            } else{
-              turnOnHeat(); // if heating room is off then turn on
+            // Check for the 'exists' field first
+            if (doc.containsKey("exists") && doc["exists"] == true) {
+                bool heatingToggleFlag = doc["heatingToggleFlag"];
+                bool chargingToggleFlag = doc["chargingToggleFlag"];
+
+                if (heatingToggleFlag) {
+                    if (heatingRoom) {
+                        turnOffHeat();  // Turn off heating if it is on
+                    } else {
+                        turnOnHeat();  // Turn on heating if it is off
+                    }
+                }
+
+                if (chargingToggleFlag) {
+                    chargingState = !chargingState;  // Toggle charging state
+                    chargeFunction();  // Call charge function
+                }
+            } else {
+                Serial.println("Battery does not exist or flags not present");
             }
-          }
 
-          if(chargingToggleFlag){
-            chargingState != chargingState;
-            chargeFunction();
-          }
-
-        } else{
-          Serial.print("Error sending GET request");
-          Serial.println(httpCode);
+        } else {
+            Serial.print("Error sending GET request: ");
+            Serial.println(httpCode);  // Print HTTP error code
         }
 
+        http.end();  // End HTTP connection
 
-        http.end();
     } else {
         Serial.println("Wi-Fi not connected. Unable to send data.");
     }
 }
+
 
 void sendDataTask(void *parameter) { // this functionn is going to handle everything webserver related
   int counter = 0;
