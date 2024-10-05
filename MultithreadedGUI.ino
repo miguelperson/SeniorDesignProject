@@ -710,6 +710,8 @@ void connectToWiFiTask() {
     Serial.println(WiFi.localIP());
 }
 
+bool localScheduleFlag = false;
+
 void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
@@ -727,7 +729,15 @@ void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
         jsonPayload += "\"setRoomTemp\":" + String(finalTemp) + ",";  // hardcoded numeric value, no quotes
         jsonPayload += "\"heatingRoom\":" + String(heatingRoom ? "true" : "false") + ",";  // boolean value, no quotes
         jsonPayload += "\"ChargingBoolean\":" + String(chargingState ? "true" : "false");  // boolean value, no quotes
-        jsonPayload += "}";
+        if(localScheduleFlag){
+          localSchedulFlag = false;
+          jsonPayload += "\"finalStartHeating\":" + String(finalStartHeating) + ",";
+          jsonPayload += "\"finalEndHeating\":" + String(finalEndHeating) + ",";
+          jsonPayload += "\"finalStartCharging\":" + String(finalStartCharging) + ",";
+          jsonPayload += "\"finalEndCharging\":" + String(finalEndCharging) + ",";
+        }
+
+        jsonPayload += "}"; // end of the json file
 
         int httpResponseCode = http.POST(jsonPayload); // posting new information to the 
 
@@ -781,18 +791,6 @@ void wifiTask(void *parameter) {
     }
 }
 
-bool localScheduleFlag = false;
-
-  // finalStartHeating = heatingTimeHour1;
-  // finalEndHeating = heatingTimeHour2;
-  // finalStartCharging = chargingTimeHour1;
-  // finalEndCharging = chargingTimeHour2;
-  // finalTemp = minTemp;
-  // heatingStartMinute = 0;
-  // heatingEndMinute = 0;
-  // chargeStartMinute = 0;
-  // chargeEndMinute = 0;
-
 void getSchedule(){ // gets app uploaded schedule from the database
   if(WiFi.status() == WL_CONNECTED){
     HTTPClient http;
@@ -833,7 +831,6 @@ void getSchedule(){ // gets app uploaded schedule from the database
         finalEndHeating = heatEndHour;
         finalStartCharging = startChargingHour;
         finalEndCharging = endChargingHour;
-        // finalTemp = minTemp;
         heatingStartMinute = startHeatingMinute;
         heatingEndMinute = stopHeatingMinute;
         chargeStartMinute = startChargingMinute;
