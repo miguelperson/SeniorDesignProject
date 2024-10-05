@@ -121,6 +121,8 @@ time_t now;                          // this are the seconds since Epoch (1970) 
 tm tm; // more convenient way for the time
 
 String batteryID = "TDES1";
+bool localScheduleFlag = false; // would ideally need a mutex lock but only two user controlled threads are really interacting with it anyways
+
 
 void setup() {
   Serial.begin(115200);  // Initialize serial communication at 115200 baud
@@ -710,8 +712,6 @@ void connectToWiFiTask() {
     Serial.println(WiFi.localIP());
 }
 
-bool localScheduleFlag = false;
-
 void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
@@ -890,7 +890,7 @@ void checkFlags() {
                 }
 
                 if(schedulingFlag){
-                  localScheduleFlag = false; // lowers local save flag
+                  localScheduleFlag = false; // lowers local save flag just in case
                   getSchedule(); // if scheduling flag was raised then get new schedule from cloud
                 }
 
@@ -1021,11 +1021,6 @@ void overheatingAlert() {
   tft.fillCircle(430, 18, 7, TFT_RED); // Red circle
 }
 
-// int finalStartHeating = 0;
-// int finalEndHeating = 0;
-// int finalStartCharging = 0;
-// int finalEndCharging = 0;
-// int finalTemp = 20; // preferred room temperature
 
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
@@ -1070,11 +1065,6 @@ void settingSave(){
   chargeStartMinute = 0;
   chargeEndMinute = 0;
   localSchedulingFlag = true;
-  // Serial.println(finalStartHeating);
-  // Serial.println(finalEndHeating);
-  // Serial.println(finalStartCharging);
-  // Serial.println(finalEndCharging);
-  // Serial.println(finalTemp);
 }
 
 void touchInterface(void *pvParameter) {
