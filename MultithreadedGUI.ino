@@ -77,8 +77,8 @@ int endChargingMin = 0;
 int finalTemp = 20; // preferred room temperature
 
 // all these variables are basically temporary
-int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingTimeMinutes = 0;     // Heating time
-int chargingTimeHour1 = 0, chargingTimeHour2 = 0, chargingTimeMinutes = 0;  // Charging time
+int heatingTimeHour1 = 0, heatingTimeHour2 = 0, heatingStartMinute = 0, heatingEndMinute = 1;     // Heating time
+int chargingTimeHour1 = 0, chargingTimeHour2 = 0, chargeStartMinute = 0, chargeEndMinute = 1;  // Charging time
 int minTemp = 20, maxTemp = 36; // Temperature range
 bool isCelsius = true;                                                      // Temperature scale
 
@@ -781,6 +781,70 @@ void wifiTask(void *parameter) {
     }
 }
 
+bool localScheduleFlag = false;
+
+  // finalStartHeating = heatingTimeHour1;
+  // finalEndHeating = heatingTimeHour2;
+  // finalStartCharging = chargingTimeHour1;
+  // finalEndCharging = chargingTimeHour2;
+  // finalTemp = minTemp;
+  // heatingStartMinute = 0;
+  // heatingEndMinute = 0;
+  // chargeStartMinute = 0;
+  // chargeEndMinute = 0;
+
+void getSchedule(){ // gets app uploaded schedule from the database
+  if(WiFi.status() == WL_CONNECTED){
+    HTTPClient http;
+    String serverPath = "https://sandbattery.info/TDESGetSchedule?batteryID="+batteryID;
+    http.begin(serverPath);
+    int httpCode = http.GET();
+
+    if(httpCode > 0){
+      String payload = http.getString();  // Get the response body
+      Serial.println("Payload received: " + payload);
+
+      if (httpCode == 404) {
+        Serial.println("Battery not found (404)");
+        return;  // Stop here if the battery wasn't found
+      }
+
+      StaticJsonDocument<512> doc;
+      DeserializationError error = deserializeJson(doc, payload);
+
+      if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+        return;
+      }
+
+      if (doc.containsKey("exists") && doc["exists"] == true) {
+        int heatStartHour = doc["heatStartHour"];
+        int heatEndHour = doc["heatEndHour"];
+        int startHeatingMinute = doc["startheatingMinute"];
+        int stopHeatingMinute = doc["stopHeatingMinute"];
+
+        int startChargingHour = doc["startChargingHour"];
+        int endChargingHour = doc["endChargingHour"];
+        int startChargingMinute = doc["startChargingMinute"];
+        int endChargingMinute = doc["endChargingMinute"];
+
+        finalStartHeating = heatStartHour;
+        finalEndHeating = heatEndHour;
+        finalStartCharging = startChargingHour;
+        finalEndCharging = endChargingHour;
+        // finalTemp = minTemp;
+        heatingStartMinute = startHeatingMinute;
+        heatingEndMinute = stopHeatingMinute;
+        chargeStartMinute = startChargingMinute;
+        chargeEndMinute = endChargingMinute;
+      }
+
+
+    }
+  }
+}
+
 void checkFlags() {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
@@ -813,6 +877,7 @@ void checkFlags() {
             if (doc.containsKey("exists") && doc["exists"] == true) {
                 bool heatingToggleFlag = doc["heatingToggleFlag"];
                 bool chargingToggleFlag = doc["chargingToggleFlag"];
+                bool schedulingFlag = doc["scheduleFlag"];
 
                 if (heatingToggleFlag) {
                     if (heatingRoom) {
@@ -826,6 +891,12 @@ void checkFlags() {
                     chargingState = !chargingState;  // Toggle charging state
                     chargeFunction();  // Call charge function
                 }
+
+                if(schedulingFlag){
+                  localScheduleFlag = false; // lowers local save flag
+                  getSchedule(); // if scheduling flag was raised then get new schedule from cloud
+                }
+
             } else {
                 Serial.println("Battery does not exist or flags not present");
             }
@@ -962,17 +1033,17 @@ void overheatingAlert() {
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
   turnOffHeat(); // make sure default state is to off
     while (1) {
-        if (tm.tm_hour == finalStartHeating && tm.tm_min == 0 && tm.tm_sec == 1) { // at 19:00:01 turn on the heating === can add another conditional statement that checks the 
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 1) { // at 19:00:01 turn on the heating === can add another conditional statement that checks the 
           Serial.println("turning on heating");
           turnOnHeat();
         }
 
-        if(tm.tm_hour == finalEndHeating && tm.tm_min == 0 && tm.tm_sec == 30){ // turn off at 19:00:30
+        if(tm.tm_hour == finalEndHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 30){ // turn off at 19:00:30
           Serial.println("scheduling off for heating");
           turnOffHeat();
         }
 
-        if(tm.tm_hour == finalStartCharging && tm.tm_min == 1 && tm.tm_sec == 1){ //  checks for starting charge time
+        if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = true;
             chargeFunction();
@@ -980,7 +1051,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           }
         }
 
-        if(tm.tm_hour == finalEndCharging && tm.tm_min == 2 && tm.tm_sec == 1){ // checks for end charging time to toggle false
+        if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 5){ // checks for end charging time to toggle false
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = false;
             chargeFunction();
@@ -997,6 +1068,11 @@ void settingSave(){
   finalStartCharging = chargingTimeHour1;
   finalEndCharging = chargingTimeHour2;
   finalTemp = minTemp;
+  heatingStartMinute = 0;
+  heatingEndMinute = 0;
+  chargeStartMinute = 0;
+  chargeEndMinute = 0;
+  localSchedulingFlag = true;
   // Serial.println(finalStartHeating);
   // Serial.println(finalEndHeating);
   // Serial.println(finalStartCharging);
