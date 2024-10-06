@@ -712,35 +712,44 @@ void connectToWiFiTask() {
     Serial.println(WiFi.localIP());
 }
 
-void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
+void sendBatteryUpdate() {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String serverPath = "https://sandbattery.info/batteryUpdate"; // Replace with your actual MongoDB API endpoint
+        String serverPath = "https://sandbattery.info/batteryUpdate";
 
+        // Create the JSON document with a size of 512 (adjust this size based on your actual usage)
+        StaticJsonDocument<512> doc;
+
+        // Add the data to the JSON document
+        doc["batteryID"] = batteryID;
+        doc["currentRoomTemp"] = roomTemp;
+        doc["currentInternalTemp"] = avgInternalTemp;
+        doc["setRoomTemp"] = finalTemp;
+        doc["heatingRoom"] = heatingRoom;
+        doc["ChargingBoolean"] = chargingState;
+
+        // Only add the schedule if the localScheduleFlag is true
+        if (localScheduleFlag) {
+            localScheduleFlag = false;  // reset the flag after sending
+            Serial.println("inside the localSchedule flag if");
+            doc["finalStartHeating"] = finalStartHeating;
+            doc["finalEndHeating"] = finalEndHeating;
+            doc["finalStartCharging"] = finalStartCharging;
+            doc["finalEndCharging"] = finalEndCharging;
+        }
+
+        // Serialize the JSON document to a string
+        String jsonPayload;
+        serializeJson(doc, jsonPayload);
+
+        // Initialize the HTTP connection
         http.begin(serverPath);
         http.addHeader("Content-Type", "application/json");
 
-        // Create the JSON data you want to send
-        // String jsonData = "{\"temperature\": 24.5, \"humidity\": 60}"; // Example JSON data
-        String jsonPayload = "{";
-        jsonPayload += "\"batteryID\":\"" + batteryID + "\",";  // batteryID is a string, so keep the quotes
-        jsonPayload += "\"currentRoomTemp\":" + String(roomTemp) + ",";  // numeric value, no quotes
-        jsonPayload += "\"currentInternalTemp\":" + String(avgInternalTemp) + ",";  // numeric value, no quotes
-        jsonPayload += "\"setRoomTemp\":" + String(finalTemp) + ",";  // hardcoded numeric value, no quotes
-        jsonPayload += "\"heatingRoom\":" + String(heatingRoom ? "true" : "false") + ",";  // boolean value, no quotes
-        jsonPayload += "\"ChargingBoolean\":" + String(chargingState ? "true" : "false");  // boolean value, no quotes
-        if(localScheduleFlag){
-          localSchedulFlag = false;
-          jsonPayload += "\"finalStartHeating\":" + String(finalStartHeating) + ",";
-          jsonPayload += "\"finalEndHeating\":" + String(finalEndHeating) + ",";
-          jsonPayload += "\"finalStartCharging\":" + String(finalStartCharging) + ",";
-          jsonPayload += "\"finalEndCharging\":" + String(finalEndCharging) + ",";
-        }
+        // Send the POST request with the JSON payload
+        int httpResponseCode = http.POST(jsonPayload);
 
-        jsonPayload += "}"; // end of the json file
-
-        int httpResponseCode = http.POST(jsonPayload); // posting new information to the 
-
+        // Handle the HTTP response
         if (httpResponseCode > 0) {
             String response = http.getString();
             Serial.println(httpResponseCode);
@@ -750,6 +759,7 @@ void sendBatteryUpdate() { // batteryID = TDES1 roomTemp
             Serial.println(httpResponseCode);
         }
 
+        // Close the connection
         http.end();
     } else {
         Serial.println("Wi-Fi not connected. Unable to send data.");
@@ -1050,7 +1060,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
             xSemaphoreGive(chargeMutex);
           }
         }
-      vTaskDelay(500 / portTICK_PERIOD_MS);
+      vTaskDelay(750 / portTICK_PERIOD_MS);
     }
 }
 
@@ -1064,7 +1074,8 @@ void settingSave(){
   heatingEndMinute = 0;
   chargeStartMinute = 0;
   chargeEndMinute = 0;
-  localSchedulingFlag = true;
+  localScheduleFlag = true;
+  // Serial.println("local schedule flag set to true");
 }
 
 void touchInterface(void *pvParameter) {
