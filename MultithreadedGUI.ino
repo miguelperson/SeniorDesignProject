@@ -966,23 +966,25 @@ void internalTemp(void *pvParameter){
 
   int roomTemp1 = dht1.readTemperature();
   int roomTemp2 = dht2.readTemperature();
-  
-  if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
-    roomTemp = roomTemp2;
-  }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
-    roomTemp = roomTemp1;
-  }else if(roomTemp1 > 100 && roomTemp2 > 100){
-    roomTemp = 69;
+  if(roomTemp1 > 100 || roomTemp2 > 100){
+    if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
+      roomTemp = roomTemp2;
+    }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
+      roomTemp = roomTemp1;
+    }else if(roomTemp1 > 100 && roomTemp2 > 100){
+      roomTemp = 69;
+    } 
   } else{
         roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
   }
 
+
   if(status1 < 10 || status2 < 10){
     if(status1 < 10 && status2 > 10){ // if thermocouple 1 is failing
     avgInternalTemp = status2;
-    } else if(status1 > 10 && status2 < 10){
+    } else if(status1 > 10 && status2 < 10){ // if thermocouple 2 is failing
     avgInternalTemp = status1;
-    } else if(status1 < 10 && status2 < 10){
+    } else if(status1 < 10 && status2 < 10){ // if both are failing
     avginternalTemp = 69;
     }
   } else{
