@@ -47,6 +47,7 @@
 
 SemaphoreHandle_t xMutex;
 SemaphoreHandle_t chargeMutex;
+SemaphoreHandle_t heatMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -152,8 +153,9 @@ void setup() {
 
   xMutex = xSemaphoreCreateMutex();
   chargeMutex = xSemaphoreCreateMutex();
+  heatMutex = xSemaphoreCreateMutex();
 
-  if (xMutex == NULL || chargeMutex == NULL) {
+  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL) {
     Serial.println("Mutex creation failed");
     while (1);
   }
@@ -164,9 +166,9 @@ void setup() {
     // Create handles DNS server things for the instance of an
     
   xTaskCreatePinnedToCore(wifiTask,"WiFiTask",4096,NULL,1,&wifiTaskHandle,1); 
-  xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,3,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
+  xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,2,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
   xTaskCreate(&touchInterface, "touchInterface", 4096, NULL, 1, NULL);
-  xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
+  xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 3, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
   xTaskCreate(&showTime,"showTime",2048, NULL, 1, NULL);
 }
@@ -829,7 +831,7 @@ void getSchedule(){ // gets app uploaded schedule from the database
       if (doc.containsKey("exists") && doc["exists"] == true) {
         int heatStartHour = doc["heatStartHour"];
         int heatEndHour = doc["heatEndHour"];
-        int startHeatingMinute = doc["startheatingMinute"];
+        int startheatingMinute = doc["startheatingMinute"];
         int stopHeatingMinute = doc["stopHeatingMinute"];
 
         int startChargingHour = doc["startChargingHour"];
@@ -837,11 +839,13 @@ void getSchedule(){ // gets app uploaded schedule from the database
         int startChargingMinute = doc["startChargingMinute"];
         int endChargingMinute = doc["endChargingMinute"];
 
+        // Serial.println(startChargingHour+""+endChargingHour+""+startChargingMinute+""+endChargingMinute);
+
         finalStartHeating = heatStartHour;
         finalEndHeating = heatEndHour;
         finalStartCharging = startChargingHour;
         finalEndCharging = endChargingHour;
-        heatingStartMinute = startHeatingMinute;
+        heatingStartMinute = startheatingMinute;
         heatingEndMinute = stopHeatingMinute;
         chargeStartMinute = startChargingMinute;
         chargeEndMinute = endChargingMinute;
@@ -895,11 +899,15 @@ void checkFlags() {
                 }
 
                 if (chargingToggleFlag) {
+                  if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
                     chargingState = !chargingState;  // Toggle charging state
-                    chargeFunction();  // Call charge function
+                    chargeFunction();
+                    xSemaphoreGive(chargeMutex);
+                  }
                 }
 
                 if(schedulingFlag){
+                  // Serial.println("new schedule detected, getting and updating local schedule");
                   localScheduleFlag = false; // lowers local save flag just in case
                   getSchedule(); // if scheduling flag was raised then get new schedule from cloud
                 }
@@ -931,6 +939,10 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         ++counter;
         checkFlags();
         sendBatteryUpdate(); // sending information to webserver
+        Serial.println("internal temperature is: ");
+        Serial.print(avgInternalTemp);
+        Serial.println("room temp: ");
+        Serial.print(roomTemp);
         vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
         // function responsible for connecting ESP32 to internet 
@@ -954,6 +966,7 @@ void internalTemp(void *pvParameter){
 
   int roomTemp1 = dht1.readTemperature();
   int roomTemp2 = dht2.readTemperature();
+  
   if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
     roomTemp = roomTemp2;
   }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
@@ -963,9 +976,20 @@ void internalTemp(void *pvParameter){
   } else{
         roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
   }
-  // Serial.println(roomTemp1+" "+roomTemp2);
 
-  avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+  if(status1 < 10 || status2 < 10){
+    if(status1 < 10 && status2 > 10){ // if thermocouple 1 is failing
+    avgInternalTemp = status2;
+    } else if(status1 > 10 && status2 < 10){
+    avgInternalTemp = status1;
+    } else if(status1 < 10 && status2 < 10){
+    avginternalTemp = 69;
+    }
+  } else{
+    avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+    }
+
+
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0){
         changeInternalTemp(avgInternalTemp);
@@ -977,7 +1001,7 @@ void internalTemp(void *pvParameter){
         Serial.println("Temp failed to get mutex lock");
       }
 
-  vTaskDelay(750 / portTICK_PERIOD_MS);
+  vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
 
@@ -1053,7 +1077,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           }
         }
 
-        if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 5){ // checks for end charging time to toggle false
+        if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 2){ // checks for end charging time to toggle false
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = false;
             chargeFunction();
@@ -1102,10 +1126,13 @@ void touchInterface(void *pvParameter) {
           }
           if (x < 100 && x > 0 && y > 320 && y < 480) {  // toggles heating
             Serial.println("Start/Stop Heating");
-            if(heatingRoom){
+            if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
+              if(heatingRoom){
               turnOffHeat();
             } else if(!heatingRoom){
               turnOnHeat();
+            }
+            xSemaphoreGive(heatMutex);
             }
           }
           if(y < 440 && y > 280 && x < 277 && x > 110){
