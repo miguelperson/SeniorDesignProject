@@ -49,6 +49,7 @@ SemaphoreHandle_t xMutex;
 SemaphoreHandle_t chargeMutex;
 SemaphoreHandle_t heatMutex;
 SemaphoreHandle_t roomTempMutex;
+SemaphoreHandle_t internalTempMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -156,8 +157,9 @@ void setup() {
   chargeMutex = xSemaphoreCreateMutex();
   heatMutex = xSemaphoreCreateMutex();
   roomTempMutex = xSemaphoreCreateMutex();
+  internalTempMutex = xSemaphoreCreateMutex();
 
-  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL || roomTempMutex) {
+  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL || roomTempMutex == NULL || internalTempMutex == NULL) {
     Serial.println("Mutex creation failed");
     while (1);
   }
