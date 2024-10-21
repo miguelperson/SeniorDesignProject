@@ -1018,8 +1018,8 @@ void internalTemp(void *pvParameter){
       }
       xSemaphoreGive(internalTempMutex);
     }
-  } else{
-      if(xSemaphoreTake(internalTEmpMutex, portMAX_DELAY) == pdTRUE){
+  } else{ // this else is if both thermocouples are having correct readings
+      if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
         avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
         xSemaphoreGive(internalTempMutex);
       }
@@ -1028,7 +1028,10 @@ void internalTemp(void *pvParameter){
 
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0){
-        changeInternalTemp(avgInternalTemp);
+        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+          changeInternalTemp(avgInternalTemp);
+          xSemaphoreGive(internalTempMutex);
+        }
         if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){ // get mutex for the roomTemp global variable
           changeRoomTemp(roomTemp);
           xSemaphoreGive(roomTempMutex);
@@ -1119,7 +1122,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
             xSemaphoreGive(heatMutex);
           }
         }
-
+      if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
         if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0 && avgInternalTemp < 500){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = true;
@@ -1127,6 +1130,8 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           xSemaphoreGive(chargeMutex);
           }
         }
+        xSemaphoreGive(internalTempMutex);
+      }
 
         if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 2){ // checks for end charging time to toggle false
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
@@ -1190,7 +1195,10 @@ void touchInterface(void *pvParameter) {
             Serial.println("toggle internal temperature");
             tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
-            changeInternalTemp(avgInternalTemp);
+            if(xSemaphore(internalTempMutex, portMAX_DELAY) == pdTRUE){
+              changeInternalTemp(avgInternalTemp);
+              xSemaphoreGive(internalTempMutex);
+            }
 
           }
           if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
@@ -1240,7 +1248,10 @@ void touchInterface(void *pvParameter) {
       } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
           screenStatus = 0;
           printMain();
-          changeInternalTemp(avgInternalTemp);
+          if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+            changeInternalTemp(avgInternalTemp);
+            xSemaphoreGive(avgInternalTemp);
+          }
           if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
             changeRoomTemp(roomTemp);
             xSemaphoreGive(roomTempMutex);
