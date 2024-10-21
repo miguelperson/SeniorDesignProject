@@ -732,7 +732,11 @@ void sendBatteryUpdate() {
           doc["currentRoomTemp"] = roomTemp;
           xSemaphoreGive(roomTempMutex);
         }
-        doc["currentInternalTemp"] = avgInternalTemp;
+
+        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+          doc["currentInternalTemp"] = avgInternalTemp;
+          xSemaphoreGive(internalTempMutex);
+        }
         doc["setRoomTemp"] = finalTemp;
         doc["heatingRoom"] = heatingRoom;
         doc["ChargingBoolean"] = chargingState;
@@ -951,7 +955,10 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         checkFlags();
         sendBatteryUpdate(); // sending information to webserver
         Serial.println("internal temperature is: ");
-        Serial.print(avgInternalTemp);
+        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+          Serial.print(avgInternalTemp);
+          xSemaphoreGive(avgInternalTemp);
+        }
         Serial.println("room temp: ");
         if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
           Serial.print(roomTemp);
@@ -1000,16 +1007,22 @@ void internalTemp(void *pvParameter){
   }
 
 
-  if(temp1 < 10 || temp2 < 10){
-    if(temp1 < 10 && temp2 > 10){ // if thermocouple 1 is failing
-    avgInternalTemp = temp2;
-    } else if(temp1 > 10 && temp2 < 10){ // if thermocouple 2 is failing
-    avgInternalTemp = temp1;
-    } else if(temp1 < 10 && temp2 < 10){ // if both are failing
-    avgInternalTemp = 69;
+  if(temp1 < 10 || temp2 < 10){ // technically I would've been fine wrapping the whole thing in one mutex, but if anything to reduce time of mutex lock being held its probably best to just have the mutex lock for each individual if block
+    if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+      if(temp1 < 10 && temp2 > 10){ // if thermocouple 1 is failing
+      avgInternalTemp = temp2;
+      } else if(temp1 > 10 && temp2 < 10){ // if thermocouple 2 is failing
+      avgInternalTemp = temp1;
+      } else if(temp1 < 10 && temp2 < 10){ // if both are failing
+      avgInternalTemp = 69;
+      }
+      xSemaphoreGive(internalTempMutex);
     }
   } else{
-    avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+      if(xSemaphoreTake(internalTEmpMutex, portMAX_DELAY) == pdTRUE){
+        avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+        xSemaphoreGive(internalTempMutex);
+      }
     }
 
 
