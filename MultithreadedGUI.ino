@@ -957,7 +957,7 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         Serial.println("internal temperature is: ");
         if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
           Serial.print(avgInternalTemp);
-          xSemaphoreGive(avgInternalTemp);
+          xSemaphoreGive(internalTempMutex);
         }
         Serial.println("room temp: ");
         if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
@@ -1195,7 +1195,7 @@ void touchInterface(void *pvParameter) {
             Serial.println("toggle internal temperature");
             tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
-            if(xSemaphore(internalTempMutex, portMAX_DELAY) == pdTRUE){
+            if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
               changeInternalTemp(avgInternalTemp);
               xSemaphoreGive(internalTempMutex);
             }
@@ -1250,7 +1250,7 @@ void touchInterface(void *pvParameter) {
           printMain();
           if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
             changeInternalTemp(avgInternalTemp);
-            xSemaphoreGive(avgInternalTemp);
+            xSemaphoreGive(internalTempMutex);
           }
           if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
             changeRoomTemp(roomTemp);
