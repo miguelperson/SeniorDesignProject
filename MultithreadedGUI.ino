@@ -951,7 +951,10 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         Serial.println("internal temperature is: ");
         Serial.print(avgInternalTemp);
         Serial.println("room temp: ");
-        // Serial.print(roomTemp);
+        if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
+          Serial.print(roomTemp);
+          xSemaphoreGive(roomTempMutex);
+        }
         vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
         // function responsible for connecting ESP32 to internet 
@@ -1084,14 +1087,16 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
       xSemaphoreGive(heatMutex);
   }
     while (1) {
-        if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 1) { // at 19:00:01 turn on the heating === can add another conditional statement that checks the 
+      if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 1 && roomTemp < finalTemp) { // at 19:00:01 turn on the heating
           Serial.println("turning on heating");
           if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
             turnOnHeat();
             xSemaphoreGive(heatMutex);
           }
         }
-
+        xSemaphoreGive(roomTempMutex);
+      }
         if(tm.tm_hour == finalEndHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 30){ // turn off at 19:00:30
           Serial.println("scheduling off for heating");
           if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
@@ -1100,7 +1105,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           }
         }
 
-        if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0){ //  checks for starting charge time
+        if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0 && avgInternalTemp < 500){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = true;
             chargeFunction();
