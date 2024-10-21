@@ -48,6 +48,7 @@
 SemaphoreHandle_t xMutex;
 SemaphoreHandle_t chargeMutex;
 SemaphoreHandle_t heatMutex;
+SemaphoreHandle_t roomTempMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -154,8 +155,9 @@ void setup() {
   xMutex = xSemaphoreCreateMutex();
   chargeMutex = xSemaphoreCreateMutex();
   heatMutex = xSemaphoreCreateMutex();
+  roomTempMutex = xSemaphoreCreateMutex();
 
-  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL) {
+  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL || roomTempMutex) {
     Serial.println("Mutex creation failed");
     while (1);
   }
@@ -891,11 +893,15 @@ void checkFlags() {
                 bool schedulingFlag = doc["scheduleFlag"];
 
                 if (heatingToggleFlag) {
+                  if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
                     if (heatingRoom) {
                         turnOffHeat();  // Turn off heating if it is on
                     } else {
                         turnOnHeat();  // Turn on heating if it is off
                     }
+                    xSemaphoreGive(heatMutex);
+                  }
+
                 }
 
                 if (chargingToggleFlag) {
@@ -942,7 +948,7 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
         Serial.println("internal temperature is: ");
         Serial.print(avgInternalTemp);
         Serial.println("room temp: ");
-        Serial.print(roomTemp);
+        // Serial.print(roomTemp);
         vTaskDelay(15000 / portTICK_PERIOD_MS);
       }else{ // no longer connected to the internet
         // function responsible for connecting ESP32 to internet 
@@ -966,26 +972,33 @@ void internalTemp(void *pvParameter){
 
   int roomTemp1 = dht1.readTemperature();
   int roomTemp2 = dht2.readTemperature();
-  if(roomTemp1 > 100 || roomTemp2 > 100){
-    if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
+  if(roomTemp1 > 100 || roomTemp2 > 100){ // updating room temperature value
+    if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+      if(roomTemp1 > 100 && roomTemp2 < 100){ // basically if roomTemp1 is erroring out
       roomTemp = roomTemp2;
-    }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
-      roomTemp = roomTemp1;
-    }else if(roomTemp1 > 100 && roomTemp2 > 100){
-      roomTemp = 69;
-    } 
+      }else if(roomTemp1 < 100 && roomTemp2 > 100){ // if roomTemp2 is erroring out
+        roomTemp = roomTemp1;
+      }else if(roomTemp1 > 100 && roomTemp2 > 100){
+        roomTemp = 69;
+      } 
+      xSemaphoreGive(roomTempMutex);
+    }
+
   } else{
+      if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
         roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
+        xSemaphoreGive(roomTempMutex);
+      }
   }
 
 
-  if(status1 < 10 || status2 < 10){
-    if(status1 < 10 && status2 > 10){ // if thermocouple 1 is failing
-    avgInternalTemp = status2;
-    } else if(status1 > 10 && status2 < 10){ // if thermocouple 2 is failing
-    avgInternalTemp = status1;
-    } else if(status1 < 10 && status2 < 10){ // if both are failing
-    avginternalTemp = 69;
+  if(temp1 < 10 || temp2 < 10){
+    if(temp1 < 10 && temp2 > 10){ // if thermocouple 1 is failing
+    avgInternalTemp = temp2;
+    } else if(temp1 > 10 && temp2 < 10){ // if thermocouple 2 is failing
+    avgInternalTemp = temp1;
+    } else if(temp1 < 10 && temp2 < 10){ // if both are failing
+    avgInternalTemp = 69;
     }
   } else{
     avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
@@ -995,7 +1008,10 @@ void internalTemp(void *pvParameter){
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0){
         changeInternalTemp(avgInternalTemp);
-        changeRoomTemp(roomTemp);
+        if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){ // get mutex for the roomTemp global variable
+          changeRoomTemp(roomTemp);
+          xSemaphoreGive(roomTempMutex);
+        }
       }
       xSemaphoreGive(xMutex);
 
@@ -1009,6 +1025,7 @@ void internalTemp(void *pvParameter){
 
 void turnOnHeat() {
   heatingRoom = true;
+  Serial.println("heating on");
   digitalWrite(heatOff, LOW);
   digitalWrite(heatOn, HIGH);
   heatCircle();
@@ -1059,16 +1076,25 @@ void overheatingAlert() {
 
 
 void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
-  turnOffHeat(); // make sure default state is to off
+  if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
+      turnOffHeat(); // make sure default state is to off
+      xSemaphoreGive(heatMutex);
+  }
     while (1) {
         if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 1) { // at 19:00:01 turn on the heating === can add another conditional statement that checks the 
           Serial.println("turning on heating");
-          turnOnHeat();
+          if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
+            turnOnHeat();
+            xSemaphoreGive(heatMutex);
+          }
         }
 
         if(tm.tm_hour == finalEndHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 30){ // turn off at 19:00:30
           Serial.println("scheduling off for heating");
-          turnOffHeat();
+          if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
+            turnOffHeat();
+            xSemaphoreGive(heatMutex);
+          }
         }
 
         if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0){ //  checks for starting charge time
@@ -1192,7 +1218,10 @@ void touchInterface(void *pvParameter) {
           screenStatus = 0;
           printMain();
           changeInternalTemp(avgInternalTemp);
-          changeRoomTemp(roomTemp);
+          if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+            changeRoomTemp(roomTemp);
+            xSemaphoreGive(roomTempMutex);
+          }
       }
         // Release the mutex after modifying screenStatus
         xSemaphoreGive(xMutex);
