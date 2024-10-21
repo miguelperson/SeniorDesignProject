@@ -726,7 +726,10 @@ void sendBatteryUpdate() {
 
         // Add the data to the JSON document
         doc["batteryID"] = batteryID;
-        doc["currentRoomTemp"] = roomTemp;
+        if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+          doc["currentRoomTemp"] = roomTemp;
+          xSemaphoreGive(roomTempMutex);
+        }
         doc["currentInternalTemp"] = avgInternalTemp;
         doc["setRoomTemp"] = finalTemp;
         doc["heatingRoom"] = heatingRoom;
