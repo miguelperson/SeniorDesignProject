@@ -950,18 +950,18 @@ void sendDataTask(void *parameter) { // this functionn is going to handle everyt
     while (true) {
       if(WiFi.status() == WL_CONNECTED){
         Serial.println("Connected to the internet!");
-        Serial.print(counter);
-        ++counter;
+        // Serial.print(counter);
+        // ++counter;
         checkFlags();
         sendBatteryUpdate(); // sending information to webserver
-        Serial.println("internal temperature is: ");
+        Serial.print("internal temperature is: ");
         if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
-          Serial.print(avgInternalTemp);
+          Serial.println(avgInternalTemp);
           xSemaphoreGive(internalTempMutex);
         }
-        Serial.println("room temp: ");
+        Serial.print("room temp: ");
         if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
-          Serial.print(roomTemp);
+          Serial.println(roomTemp);
           xSemaphoreGive(roomTempMutex);
         }
         vTaskDelay(15000 / portTICK_PERIOD_MS);
