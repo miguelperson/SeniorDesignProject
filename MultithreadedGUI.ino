@@ -11,6 +11,8 @@
 #include <HTTPClient.h>
 #include <time.h>
 #include <ArduinoJson.h> 
+#include <AsyncHTTPRequest_Generic.h>
+
 
 
 // Pin definitions for DHT11
@@ -720,64 +722,60 @@ void connectToWiFiTask() {
 
 void sendBatteryUpdate() {
     if (WiFi.status() == WL_CONNECTED) {
-        HTTPClient http;
-        String serverPath = "https://sandbattery.info/batteryUpdate";
+        AsyncHTTPRequest* request = new AsyncHTTPRequest();
+        if (request) {
+            StaticJsonDocument<512> doc;
+            doc["batteryID"] = batteryID;
 
-        // Create the JSON document with a size of 512 (adjust this size based on your actual usage)
-        StaticJsonDocument<512> doc;
+            if (xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE) {
+                doc["currentRoomTemp"] = roomTemp;
+                xSemaphoreGive(roomTempMutex);
+            }
 
-        // Add the data to the JSON document
-        doc["batteryID"] = batteryID;
-        if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
-          doc["currentRoomTemp"] = roomTemp;
-          xSemaphoreGive(roomTempMutex);
+            if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
+                doc["currentInternalTemp"] = avgInternalTemp;
+                xSemaphoreGive(internalTempMutex);
+            }
+
+            doc["setRoomTemp"] = finalTemp;
+            doc["heatingRoom"] = heatingRoom;
+            doc["ChargingBoolean"] = chargingState;
+
+            if (localScheduleFlag) {
+                localScheduleFlag = false;
+                doc["finalStartHeating"] = finalStartHeating;
+                doc["finalEndHeating"] = finalEndHeating;
+                doc["finalStartCharging"] = finalStartCharging;
+                doc["finalEndCharging"] = finalEndCharging;
+            }
+
+            String jsonPayload;
+            serializeJson(doc, jsonPayload);
+
+            request->onReadyStateChange([](void* optParm, AsyncHTTPRequest* req, int readyState) {
+                if (readyState == 4) {
+                    if (req->responseHTTPcode() > 0) {
+                        Serial.println(req->responseHTTPcode());
+                        Serial.println(req->responseText());
+                    } else {
+                        Serial.println("Error on sending POST request");
+                    }
+                }
+            });
+
+            String serverPath = "https://sandbattery.info/batteryUpdate";
+            if (request->open("POST", serverPath.c_str())) {
+                request->setReqHeader("Content-Type", "application/json");
+                request->send(jsonPayload.c_str());
+            } else {
+                Serial.println("Failed to initiate POST request");
+            }
         }
-
-        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
-          doc["currentInternalTemp"] = avgInternalTemp;
-          xSemaphoreGive(internalTempMutex);
-        }
-        doc["setRoomTemp"] = finalTemp;
-        doc["heatingRoom"] = heatingRoom;
-        doc["ChargingBoolean"] = chargingState;
-
-        // Only add the schedule if the localScheduleFlag is true
-        if (localScheduleFlag) {
-            localScheduleFlag = false;  // reset the flag after sending
-            Serial.println("inside the localSchedule flag if");
-            doc["finalStartHeating"] = finalStartHeating;
-            doc["finalEndHeating"] = finalEndHeating;
-            doc["finalStartCharging"] = finalStartCharging;
-            doc["finalEndCharging"] = finalEndCharging;
-        }
-
-        // Serialize the JSON document to a string
-        String jsonPayload;
-        serializeJson(doc, jsonPayload);
-
-        // Initialize the HTTP connection
-        http.begin(serverPath);
-        http.addHeader("Content-Type", "application/json");
-
-        // Send the POST request with the JSON payload
-        int httpResponseCode = http.POST(jsonPayload);
-
-        // Handle the HTTP response
-        if (httpResponseCode > 0) {
-            String response = http.getString();
-            Serial.println(httpResponseCode);
-            Serial.println(response);
-        } else {
-            Serial.print("Error on sending POST: ");
-            Serial.println(httpResponseCode);
-        }
-
-        // Close the connection
-        http.end();
     } else {
         Serial.println("Wi-Fi not connected. Unable to send data.");
     }
 }
+
 
 String generateHTML() {
     String html = "<!DOCTYPE html><html><head><title>WiFi Setup</title></head><body>";
@@ -814,134 +812,113 @@ void wifiTask(void *parameter) {
     }
 }
 
-void getSchedule(){ // gets app uploaded schedule from the database
-  if(WiFi.status() == WL_CONNECTED){
-    HTTPClient http;
-    String serverPath = "https://sandbattery.info/TDESGetSchedule?batteryID="+batteryID;
-    http.begin(serverPath);
-    int httpCode = http.GET();
-
-    if(httpCode > 0){
-      String payload = http.getString();  // Get the response body
-      Serial.println("Payload received: " + payload);
-
-      if (httpCode == 404) {
-        Serial.println("Battery not found (404)");
-        return;  // Stop here if the battery wasn't found
-      }
-
-      StaticJsonDocument<512> doc;
-      DeserializationError error = deserializeJson(doc, payload);
-
-      if (error) {
-        Serial.print(F("deserializeJson() failed: "));
-        Serial.println(error.f_str());
-        return;
-      }
-
-      if (doc.containsKey("exists") && doc["exists"] == true) {
-        int heatStartHour = doc["heatStartHour"];
-        int heatEndHour = doc["heatEndHour"];
-        int startheatingMinute = doc["startheatingMinute"];
-        int stopHeatingMinute = doc["stopHeatingMinute"];
-
-        int startChargingHour = doc["startChargingHour"];
-        int endChargingHour = doc["endChargingHour"];
-        int startChargingMinute = doc["startChargingMinute"];
-        int endChargingMinute = doc["endChargingMinute"];
-
-        // Serial.println(startChargingHour+""+endChargingHour+""+startChargingMinute+""+endChargingMinute);
-
-        finalStartHeating = heatStartHour;
-        finalEndHeating = heatEndHour;
-        finalStartCharging = startChargingHour;
-        finalEndCharging = endChargingHour;
-        heatingStartMinute = startheatingMinute;
-        heatingEndMinute = stopHeatingMinute;
-        chargeStartMinute = startChargingMinute;
-        chargeEndMinute = endChargingMinute;
-      }
-
-
-    }
-  }
-}
-
-void checkFlags() {
+void getSchedule() {
     if (WiFi.status() == WL_CONNECTED) {
-        HTTPClient http;
-        String serverPath = "https://sandbattery.info/TDESToggleCheck?batteryID="+batteryID;
-        // Serial.println("URL: " + serverPath);
+        AsyncHTTPRequest* request = new AsyncHTTPRequest();
+        if (request) {
+            request->onReadyStateChange([](void* optParm, AsyncHTTPRequest* req, int readyState) {
+                if (readyState == 4 && req->responseHTTPcode() > 0) {
+                    String payload = req->responseText();
+                    Serial.println("Payload received: " + payload);
 
-        http.begin(serverPath);
+                    StaticJsonDocument<512> doc;
+                    DeserializationError error = deserializeJson(doc, payload);
 
-        int httpCode = http.GET();  // No need to add headers for GET requests
-
-        if (httpCode > 0) {
-            String payload = http.getString();  // Get the response body
-            Serial.println("Payload received: " + payload);
-
-            if (httpCode == 404) {
-                Serial.println("Battery not found (404)");
-                return;  // Stop here if the battery wasn't found
-            }
-
-            StaticJsonDocument<512> doc;
-            DeserializationError error = deserializeJson(doc, payload);
-
-            if (error) {
-                Serial.print(F("deserializeJson() failed: "));
-                Serial.println(error.f_str());
-                return;
-            }
-
-            // Check for the 'exists' field first
-            if (doc.containsKey("exists") && doc["exists"] == true) {
-                bool heatingToggleFlag = doc["heatingToggleFlag"];
-                bool chargingToggleFlag = doc["chargingToggleFlag"];
-                bool schedulingFlag = doc["scheduleFlag"];
-
-                if (heatingToggleFlag) {
-                  if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
-                    if (heatingRoom) {
-                        turnOffHeat();  // Turn off heating if it is on
-                    } else {
-                        turnOnHeat();  // Turn on heating if it is off
+                    if (error) {
+                        Serial.print(F("deserializeJson() failed: "));
+                        Serial.println(error.f_str());
+                        return;
                     }
-                    xSemaphoreGive(heatMutex);
-                  }
 
+                    if (doc.containsKey("exists") && doc["exists"] == true) {
+                        finalStartHeating = doc["heatStartHour"];
+                        finalEndHeating = doc["heatEndHour"];
+                        heatingStartMinute = doc["startheatingMinute"];
+                        heatingEndMinute = doc["stopHeatingMinute"];
+                        finalStartCharging = doc["startChargingHour"];
+                        finalEndCharging = doc["endChargingHour"];
+                        chargeStartMinute = doc["startChargingMinute"];
+                        chargeEndMinute = doc["endChargingMinute"];
+                    }
                 }
+            });
 
-                if (chargingToggleFlag) {
-                  if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
-                    chargingState = !chargingState;  // Toggle charging state
-                    chargeFunction();
-                    xSemaphoreGive(chargeMutex);
-                  }
-                }
-
-                if(schedulingFlag){
-                  // Serial.println("new schedule detected, getting and updating local schedule");
-                  localScheduleFlag = false; // lowers local save flag just in case
-                  getSchedule(); // if scheduling flag was raised then get new schedule from cloud
-                }
-
+            String serverPath = "https://sandbattery.info/TDESGetSchedule?batteryID=" + batteryID;
+            if (request->open("GET", serverPath.c_str())) {
+                request->send();
             } else {
-                Serial.println("Battery does not exist or flags not present");
+                Serial.println("Failed to initiate GET request");
             }
-
-        } else {
-            Serial.print("Error sending GET request: ");
-            Serial.println(httpCode);  // Print HTTP error code
         }
-
-        http.end();  // End HTTP connection
-
     } else {
         Serial.println("Wi-Fi not connected. Unable to send data.");
     }
 }
+
+
+void checkFlags() {
+    if (WiFi.status() == WL_CONNECTED) {
+        AsyncHTTPRequest* request = new AsyncHTTPRequest();
+        if (request) {
+            request->onReadyStateChange([](void* optParm, AsyncHTTPRequest* req, int readyState) {
+                if (readyState == 4 && req->responseHTTPcode() > 0) {
+                    String payload = req->responseText();
+                    Serial.println("Payload received: " + payload);
+
+                    StaticJsonDocument<512> doc;
+                    DeserializationError error = deserializeJson(doc, payload);
+
+                    if (error) {
+                        Serial.print(F("deserializeJson() failed: "));
+                        Serial.println(error.f_str());
+                        return;
+                    }
+
+                    if (doc.containsKey("exists") && doc["exists"] == true) {
+                        bool heatingToggleFlag = doc["heatingToggleFlag"];
+                        bool chargingToggleFlag = doc["chargingToggleFlag"];
+                        bool schedulingFlag = doc["scheduleFlag"];
+
+                        if (heatingToggleFlag) {
+                            if (xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE) {
+                                if (heatingRoom) {
+                                    turnOffHeat();
+                                } else {
+                                    turnOnHeat();
+                                }
+                                xSemaphoreGive(heatMutex);
+                            }
+                        }
+
+                        if (chargingToggleFlag) {
+                            if (xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE) {
+                                chargingState = !chargingState;
+                                chargeFunction();
+                                xSemaphoreGive(chargeMutex);
+                            }
+                        }
+
+                        if (schedulingFlag) {
+                            localScheduleFlag = false;
+                            getSchedule();
+                        }
+                    }
+                }
+            });
+
+            String serverPath = "https://sandbattery.info/TDESToggleCheck?batteryID=" + batteryID;
+            if (request->open("GET", serverPath.c_str())) {
+                request->send();
+            } else {
+                Serial.println("Failed to initiate GET request");
+            }
+        }
+    } else {
+        Serial.println("Wi-Fi not connected. Unable to send data.");
+    }
+}
+
+
 
 
 void sendDataTask(void *parameter) { // this functionn is going to handle everything webserver related
