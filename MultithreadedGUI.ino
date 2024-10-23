@@ -11,7 +11,7 @@
 #include <HTTPClient.h>
 #include <time.h>
 #include <ArduinoJson.h> 
-#include <AsyncHTTPRequest_Generic.h>
+
 
 
 
@@ -181,10 +181,6 @@ void setup() {
 
 void loop() {}
 
-void editTime(int &hours) { 
-  // This function will allow the user to edit the time
-  hours = (hours + 1) % 24; // Example logic to increment hours
-}
 
 void editTemperatureRange() {
   if (minTemp < maxTemp)
@@ -258,6 +254,17 @@ void clearPreviousHighlight() {
   }
 }
 
+
+  // finalStartHeating = heatingTimeHour1;
+  // finalEndHeating = heatingTimeHour2;
+  // finalStartCharging = chargingTimeHour1;
+  // finalEndCharging = chargingTimeHour2;
+  // finalTemp = minTemp;
+  // startHeatingMin = heatingStartMinute;
+  // endHeatingMin = heatingEndMinute;
+  // startChargingMin = chargeStartMinute;
+  // endChargingMin = chargeEndMinute;
+
 void updateSelectedArea() {
     switch (selectedField) {
         case CHARGING_TIME1:
@@ -267,7 +274,7 @@ void updateSelectedArea() {
             tft.setCursor(195, 45);
             tft.print(chargingTimeHour1);
             tft.print(":");
-            tft.print(startChargingMin);
+            tft.print(chargeStartMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
@@ -279,7 +286,7 @@ void updateSelectedArea() {
             tft.setCursor(325, 45);
             tft.print(chargingTimeHour2);
             tft.print(":");
-            tft.print(endChargingMin);
+            tft.print(chargeEndMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
@@ -291,7 +298,7 @@ void updateSelectedArea() {
             tft.setCursor(195, 90);
             tft.print(heatingTimeHour1);
             tft.print(":");
-            tft.print(startHeatingMin);
+            tft.print(heatingStartMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
@@ -303,7 +310,7 @@ void updateSelectedArea() {
             tft.setCursor(325, 90);
             tft.print(heatingTimeHour2);
             tft.print(":");
-            tft.print(endHeatingMin);
+            tft.print(heatingEndMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
@@ -342,37 +349,47 @@ void updateSelectedArea() {
     }
 }
 
+  // finalStartHeating = heatingTimeHour1;
+  // finalEndHeating = heatingTimeHour2;
+  // finalStartCharging = chargingTimeHour1;
+  // finalEndCharging = chargingTimeHour2;
+  // finalTemp = minTemp;
+  // startHeatingMin = heatingStartMinute;
+  // endHeatingMin = heatingEndMinute;
+  // startChargingMin = chargeStartMinute;
+  // endChargingMin = chargeEndMinute;
+
 /// Increase the value of the selected field
 void increaseValue() {
   switch (selectedField) {
     case CHARGING_TIME1:
-      startChargingMin += 15;
-      if (startChargingMin >= 60) {
-        startChargingMin = 0;  // Reset minutes to 0 when reaching 60
+      chargeStartMinute += 15;
+      if (chargeStartMinute >= 60) {
+        chargeStartMinute = 0;  // Reset minutes to 0 when reaching 60
         chargingTimeHour1 = (chargingTimeHour1 + 1) % 24;  // Increase the hour
       }
       updateSelectedArea();
       break;
     case CHARGING_TIME2:
-      endChargingMin += 15;
-      if (endChargingMin >= 60) {
-        endChargingMin = 0;
+      chargeEndMinute += 15;
+      if (chargeEndMinute >= 60) {
+        chargeEndMinute = 0;
         chargingTimeHour2 = (chargingTimeHour2 + 1) % 24;
       }
       updateSelectedArea();
       break;
     case HEATING_TIME1:
-      startHeatingMin += 15;
-      if (startHeatingMin >= 60) {
-        startHeatingMin = 0;
+      heatingStartMinute += 15;
+      if (heatingStartMinute >= 60) {
+        heatingStartMinute = 0;
         heatingTimeHour1 = (heatingTimeHour1 + 1) % 24;
       }
       updateSelectedArea();
       break;
     case HEATING_TIME2:
-      endHeatingMin += 15;
-      if (endHeatingMin >= 60) {
-        endHeatingMin = 0;
+      heatingEndMinute += 15;
+      if (heatingEndMinute >= 60) {
+        heatingEndMinute = 0;
         heatingTimeHour2 = (heatingTimeHour2 + 1) % 24;
       }
       updateSelectedArea();
@@ -407,37 +424,47 @@ void increaseValue() {
   }
 }
 
+  // finalStartHeating = heatingTimeHour1;
+  // finalEndHeating = heatingTimeHour2;
+  // finalStartCharging = chargingTimeHour1;
+  // finalEndCharging = chargingTimeHour2;
+  // finalTemp = minTemp;
+  // startHeatingMin = heatingStartMinute;
+  // endHeatingMin = heatingEndMinute;
+  // startChargingMin = chargeStartMinute;
+  // endChargingMin = chargeEndMinute;
+
 // Decrease the value of the selected field
 void decreaseValue() {
   switch (selectedField) {
     case CHARGING_TIME1:
-      startChargingMin -= 15;
-      if (startChargingMin < 0) {
-        startChargingMin = 45;  // If minutes go below 0, set to 45
+      chargeStartMinute -= 15;
+      if (chargeStartMinute < 0) {
+        chargeStartMinute = 45;  // If minutes go below 0, set to 45
         chargingTimeHour1 = (chargingTimeHour1 - 1 + 24) % 24;  // Decrease the hour
       }
       updateSelectedArea();
       break;
     case CHARGING_TIME2:
-      endChargingMin -= 15;
-      if (endChargingMin < 0) {
-        endChargingMin = 45;
+      chargeEndMinute -= 15;
+      if (chargeEndMinute < 0) {
+        chargeEndMinute = 45;
         chargingTimeHour2 = (chargingTimeHour2 - 1 + 24) % 24;
       }
       updateSelectedArea();
       break;
     case HEATING_TIME1:
-      startHeatingMin -= 15;
-      if (startHeatingMin < 0) {
-        startHeatingMin = 45;
+      heatingStartMinute -= 15;
+      if (heatingStartMinute < 0) {
+        heatingStartMinute = 45;
         heatingTimeHour1 = (heatingTimeHour1 - 1 + 24) % 24;
       }
       updateSelectedArea();
       break;
     case HEATING_TIME2:
-      endHeatingMin -= 15;
-      if (endHeatingMin < 0) {
-        endHeatingMin = 45;
+      heatingEndMinute -= 15;
+      if (heatingEndMinute < 0) {
+        heatingEndMinute = 45;
         heatingTimeHour2 = (heatingTimeHour2 - 1 + 24) % 24;
       }
       updateSelectedArea();
@@ -791,6 +818,11 @@ void sendBatteryUpdate() {
             doc["finalEndHeating"] = finalEndHeating;
             doc["finalStartCharging"] = finalStartCharging;
             doc["finalEndCharging"] = finalEndCharging;
+            doc["startHeatingMin"] = startHeatingMin;
+            doc["endHeatingMin"] = endHeatingMin;
+            doc["startChargingMin"] = startChargingMin;
+            doc["endChargingMin"] = endChargingMin;
+
         }
 
         // Serialize the JSON document to a string
@@ -1191,16 +1223,17 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
     }
 }
 
+
 void settingSave(){
   finalStartHeating = heatingTimeHour1;
   finalEndHeating = heatingTimeHour2;
   finalStartCharging = chargingTimeHour1;
   finalEndCharging = chargingTimeHour2;
   finalTemp = minTemp;
-  heatingStartMinute = startHeatingMin;
-  heatingEndMinute = endHeatingMin;
-  chargeStartMinute = startChargingMin;
-  chargeEndMinute = endChargingMin;
+  startHeatingMin = heatingStartMinute;
+  endHeatingMin = heatingEndMinute;
+  startChargingMin = chargeStartMinute;
+  endChargingMin = chargeEndMinute;
   localScheduleFlag = true;
   Serial.print(finalStartCharging);
   Serial.print(":");
