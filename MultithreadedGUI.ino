@@ -12,7 +12,7 @@
 #include <time.h>
 #include <ArduinoJson.h> 
 #include <AsyncHTTPRequest_Generic.h>
-#define DEBUG_ASYNC_HTTP_REQUEST_GENERIC 1
+
 
 
 // Pin definitions for DHT11
@@ -47,10 +47,11 @@
 #define MY_NTP_SERVER "at.pool.ntp.org"
 #define MY_TZ "EST5EDT,M3.2.0,M11.1.0"
 
-SemaphoreHandle_t xMutex; // protects screen status
+SemaphoreHandle_t xMutex;
 SemaphoreHandle_t chargeMutex;
 SemaphoreHandle_t heatMutex;
 SemaphoreHandle_t roomTempMutex;
+SemaphoreHandle_t internalTempMutex;
 
 // Setting global variables
 int roomTemp = 0;
@@ -158,8 +159,9 @@ void setup() {
   chargeMutex = xSemaphoreCreateMutex();
   heatMutex = xSemaphoreCreateMutex();
   roomTempMutex = xSemaphoreCreateMutex();
+  internalTempMutex = xSemaphoreCreateMutex();
 
-  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL || roomTempMutex == NULL) {
+  if (xMutex == NULL || chargeMutex == NULL || heatMutex == NULL || roomTempMutex == NULL || internalTempMutex == NULL) {
     Serial.println("Mutex creation failed");
     while (1);
   }
@@ -732,7 +734,11 @@ void sendBatteryUpdate() {
           doc["currentRoomTemp"] = roomTemp;
           xSemaphoreGive(roomTempMutex);
         }
-        doc["currentInternalTemp"] = avgInternalTemp;
+
+        if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
+            doc["currentInternalTemp"] = avgInternalTemp;
+            xSemaphoreGive(internalTempMutex);
+        }
         doc["setRoomTemp"] = finalTemp;
         doc["heatingRoom"] = heatingRoom;
         doc["ChargingBoolean"] = chargingState;
@@ -950,10 +956,10 @@ void sendDataTask(void *parameter) {
             checkFlags();  // Now async
             sendBatteryUpdate();  // Now async
             Serial.print("internal temperature is: ");
-            // if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
+            if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
                 Serial.println(avgInternalTemp);
-            //     xSemaphoreGive(internalTempMutex);
-            // }
+                xSemaphoreGive(internalTempMutex);
+            }
             Serial.print("room temp: ");
             if (xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE) {
                 Serial.println(roomTemp);
@@ -1001,22 +1007,32 @@ void internalTemp(void *pvParameter){
   }
 
 
-  if(temp1 < 10 || temp2 < 10){
-    if(temp1 < 10 && temp2 > 10){ // if thermocouple 1 is failing
-    avgInternalTemp = temp2;
-    } else if(temp1 > 10 && temp2 < 10){ // if thermocouple 2 is failing
-    avgInternalTemp = temp1;
-    } else if(temp1 < 10 && temp2 < 10){ // if both are failing
-    avgInternalTemp = 69;
+
+  if(temp1 < 10 || temp2 < 10){ // technically I would've been fine wrapping the whole thing in one mutex, but if anything to reduce time of mutex lock being held its probably best to just have the mutex lock for each individual if block
+    if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+      if(temp1 < 10 && temp2 > 10){ // if thermocouple 1 is failing
+      avgInternalTemp = temp2;
+      } else if(temp1 > 10 && temp2 < 10){ // if thermocouple 2 is failing
+      avgInternalTemp = temp1;
+      } else if(temp1 < 10 && temp2 < 10){ // if both are failing
+      avgInternalTemp = 69;
+      }
+      xSemaphoreGive(internalTempMutex);
     }
-  } else{
-    avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+  } else{ // this else is if both thermocouples are having correct readings
+      if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+        avgInternalTemp = (internalTemp1 + internalTemp2) / 2; // average internal temperature
+        xSemaphoreGive(internalTempMutex);
+      }
     }
 
 
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus == 0){
-        changeInternalTemp(avgInternalTemp);
+        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+          changeInternalTemp(avgInternalTemp);
+          xSemaphoreGive(internalTempMutex);
+        }
         if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){ // get mutex for the roomTemp global variable
           changeRoomTemp(roomTemp);
           xSemaphoreGive(roomTempMutex);
@@ -1027,7 +1043,6 @@ void internalTemp(void *pvParameter){
       } else{
         Serial.println("Temp failed to get mutex lock");
       }
-
   vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
@@ -1107,7 +1122,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
             xSemaphoreGive(heatMutex);
           }
         }
-
+      // if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
         if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0 && avgInternalTemp < 500){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = true;
@@ -1115,6 +1130,8 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
           xSemaphoreGive(chargeMutex);
           }
         }
+      //   xSemaphoreGive(internalTempMutex);
+      // }
 
         if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 2){ // checks for end charging time to toggle false
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
@@ -1178,9 +1195,12 @@ void touchInterface(void *pvParameter) {
             Serial.println("toggle internal temperature");
             tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
-            changeInternalTemp(avgInternalTemp);
-
+            if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+              changeInternalTemp(avgInternalTemp);
+              xSemaphoreGive(internalTempMutex);
+            }
           }
+
           if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
             // celciusTemp = !celciusTemp;
           // changeRoomTemp(roomTemp);
@@ -1226,9 +1246,12 @@ void touchInterface(void *pvParameter) {
           printSettings();   // uses function to print the settings screen to the display
           Serial.println("Settings Button");
       } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
-          screenStatus = 0;
+           screenStatus = 0;
           printMain();
-          changeInternalTemp(avgInternalTemp);
+          if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+            changeInternalTemp(avgInternalTemp);
+            xSemaphoreGive(internalTempMutex);
+          }
           if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
             changeRoomTemp(roomTemp);
             xSemaphoreGive(roomTempMutex);
