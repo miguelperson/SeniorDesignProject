@@ -1099,14 +1099,22 @@ void overheatingAlert() {
 }
 
 
-void heater(void *pvParameter) {  // responsible for heat scheduling ==================== going to need to input webserver heating status updates if user manually changes heating status
+void heater(void *pvParameter) {  // responsible for heat scheduling ===========
   if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
       turnOffHeat(); // make sure default state is to off
       xSemaphoreGive(heatMutex);
   }
+  int tempInternal = 0;
+
     while (1) {
+      if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+        tempInternal = avgInternalTemp;
+        xSemaphoreGive(internalTempMutex);
+      }
+      Serial.print("TempInternal variable says: ");
+      Serial.println(tempInternal);
       if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
-        if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 1 && roomTemp < finalTemp) { // at 19:00:01 turn on the heating
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == heatingStartMinute && tm.tm_sec == 1 && roomTemp < finalTemp) { // at 19:00:01 turn on the heating
           Serial.println("turning on heating");
           if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
             turnOnHeat();
@@ -1122,16 +1130,15 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
             xSemaphoreGive(heatMutex);
           }
         }
-      // if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
-        if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0 && avgInternalTemp < 500){ //  checks for starting charge time
+
+        if(tm.tm_hour == finalStartCharging && tm.tm_min == chargeStartMinute && tm.tm_sec == 0 && tempInternal < 500){ //  checks for starting charge time
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
             chargingState = true;
             chargeFunction();
           xSemaphoreGive(chargeMutex);
           }
         }
-      //   xSemaphoreGive(internalTempMutex);
-      // }
+
 
         if(tm.tm_hour == finalEndCharging && tm.tm_min == chargeEndMinute && tm.tm_sec == 2){ // checks for end charging time to toggle false
           if(xSemaphoreTake(chargeMutex, portMAX_DELAY) == pdTRUE){
