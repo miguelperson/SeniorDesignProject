@@ -174,7 +174,7 @@ void setup() {
   xTaskCreatePinnedToCore(wifiTask,"WiFiTask",4096,NULL,1,&wifiTaskHandle,1); 
   xTaskCreatePinnedToCore(sendDataTask,"SendData",16384,NULL,2,&dataSendTaskHandle,1); // task to connect to webserver and monitor WiFi
   xTaskCreate(&touchInterface, "touchInterface", 4096, NULL, 1, NULL);
-  xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 3, NULL);
+  xTaskCreate(&internalTemp, "internalTemp", 2000, NULL, 2, NULL);
   xTaskCreate(&heater, "heater", 3000, NULL, 1, NULL);
   xTaskCreate(&showTime,"showTime",2048, NULL, 1, NULL);
   // xTaskCreate(monitorStack, "StackMonitor", 2048, NULL, 1, NULL);
@@ -266,6 +266,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
 }
 
 void internalTemp(void *pvParameter){
+  int localScreenStatus = 0;
   while(1){
   // Read temperature from first thermocouple
   int status1 = thermoCouple1.read();
@@ -290,7 +291,6 @@ void internalTemp(void *pvParameter){
       } 
       xSemaphoreGive(roomTempMutex);
     }
-
   } else{
       if(xSemaphoreTake(roomTempMutex,portMAX_DELAY) == pdTRUE){
         roomTemp = (roomTemp1 + roomTemp2) / 2; // average room temperature
@@ -315,10 +315,13 @@ void internalTemp(void *pvParameter){
         xSemaphoreGive(internalTempMutex);
       }
     }
+    if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE){
+      localScreenStatus = screenStatus;
+      xSemaphoreGive(xMutex);
+    }
 
-
-    if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
-      if(screenStatus == 0){
+    // if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
+      if(localScreenStatus == 0){
         if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
           changeInternalTemp(avgInternalTemp);
           xSemaphoreGive(internalTempMutex);
@@ -328,11 +331,11 @@ void internalTemp(void *pvParameter){
           xSemaphoreGive(roomTempMutex);
         }
       }
-      xSemaphoreGive(xMutex);
+      // xSemaphoreGive(xMutex);
 
-      } else{
-        Serial.println("Temp failed to get mutex lock");
-      }
+      // } else{
+      //   Serial.println("Temp failed to get mutex lock");
+      // }
   vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
@@ -482,7 +485,7 @@ void getSchedule(){ // gets app uploaded schedule from the database
         int startheatingMinute = doc["startheatingMinute"];
         int stopHeatingMinute = doc["stopHeatingMinute"];
 
-        int startChargingHour = doc["startChargingHour"];
+        int startChargingHour = doc["startChargingHour"]; // 1
         int endChargingHour = doc["endChargingHour"];
         int startChargingMinute = doc["startChargingMinute"];
         int endChargingMinute = doc["endChargingMinute"];
@@ -647,6 +650,8 @@ void connectToWiFiTask() {
 }
 
 void sendBatteryUpdate() {
+  int localRoomTemp = 0;
+  int localAvgInternalTemp = 0;
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
         String serverPath = "https://sandbattery.info/batteryUpdate";
@@ -654,17 +659,27 @@ void sendBatteryUpdate() {
         // Create the JSON document with a size of 512 (adjust this size based on your actual usage)
         StaticJsonDocument<512> doc;
 
-        // Add the data to the JSON document
-        doc["batteryID"] = batteryID;
         if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
-          doc["currentRoomTemp"] = roomTemp;
+          localRoomTemp = roomTemp;
           xSemaphoreGive(roomTempMutex);
         }
 
-        if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
-            doc["currentInternalTemp"] = avgInternalTemp;
-            xSemaphoreGive(internalTempMutex);
+        if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+          localAvgInternalTemp = avgInternalTemp;
+          xSemaphoreGive(internalTempMutex);
         }
+
+        // Add the data to the JSON document
+        doc["batteryID"] = batteryID;
+        // if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+          doc["currentRoomTemp"] = localRoomTemp;
+        //   xSemaphoreGive(roomTempMutex);
+        // }
+
+        // if (xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE) {
+            doc["currentInternalTemp"] = localAvgInternalTemp;
+        //     xSemaphoreGive(internalTempMutex);
+        // }
         doc["setRoomTemp"] = finalTemp;
         doc["heatingRoom"] = heatingRoom;
         doc["ChargingBoolean"] = chargingState;
