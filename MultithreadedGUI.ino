@@ -220,35 +220,23 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
       xSemaphoreGive(heatMutex);
   }
   int tempInternalTemperature = 0;
-  int tempRoomTemp = 0;
-
     while (1) {
       if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){ // creating local internal temp vairable to avoid nested mutex locks
         tempInternalTemperature = avgInternalTemp;
         xSemaphoreGive(internalTempMutex);
       }
 
-      if(xSemaphoreTake(roomTempMutex, 200 / portTICK_PERIOD_MS) == pdTRUE){
-        tempRoomTemp = roomTemp;
-        xSemaphoreGive(roomTempMutex);
-      }
-      // Serial.println(tempRoomTemp);
-
-      // if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
-        if (tm.tm_hour == finalStartHeating && tm.tm_min == startHeatingMin && tm.tm_sec == 1 && tempRoomTemp < finalTemp) { // at 19:00:01 turn on the heating
+      if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+        if (tm.tm_hour == finalStartHeating && tm.tm_min == startHeatingMin  && tm.tm_sec == 1 && roomTemp < finalTemp) { // at 19:00:01 turn on the heating
           Serial.println("turning on heating");
           if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
             turnOnHeat();
             xSemaphoreGive(heatMutex);
           }
         }
-
-        // if(tm.tm_hour >=  finalStartHeating || tm.tm_min >= startHeatingMin)
-        //   if(tempRoomTemp <= (finalTemp -2) )
-        //     rutnOnHeat()
-      //   xSemaphoreGive(roomTempMutex);
-      // }
-        if(tm.tm_hour == finalEndHeating && tm.tm_min == endHeatingMin && tm.tm_sec == 1){ // turn off at 13:16:30
+        xSemaphoreGive(roomTempMutex);
+      }
+        if(tm.tm_hour == finalEndHeating && tm.tm_min == heatingEndMinute && tm.tm_sec == 30){ // turn off at 19:00:30
           Serial.println("scheduling off for heating");
           if(xSemaphoreTake(heatMutex, portMAX_DELAY) == pdTRUE){
             turnOffHeat();
@@ -273,7 +261,7 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
             xSemaphoreGive(chargeMutex);
           }
         }
-      vTaskDelay(500 / portTICK_PERIOD_MS);
+      vTaskDelay(750 / portTICK_PERIOD_MS);
     }
 }
 
@@ -353,7 +341,7 @@ void internalTemp(void *pvParameter){
 }
 
 void touchInterface(void *pvParameter) {
-  int tempInternalTouch = 0;
+  int localScreenStatus = 0;
 
   while (1) {
     if (ft6336u.read_td_status()) {  // if touched
@@ -364,15 +352,10 @@ void touchInterface(void *pvParameter) {
       Serial.print(" , ");
       Serial.print(y);
       Serial.println(")");
+      // if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE){
+      //   xSemaphoreGive(xMutex);
+      // }
 
-
-      if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
-        tempInternalTouch = avgInternalTemp;
-        xSemaphoreGive(internalTempMutex);
-      }
-
-      // Serial.print("Touch temp internal: ");
-      // Serial.println(tempInternalTouch);
       if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {  // wrapping screenStatus stuff in mutex
         if (screenStatus == 0) {
           if (x < 100 && x > 0 && y > 173 && y < 320) {  // toggles charging state of battery
@@ -398,8 +381,10 @@ void touchInterface(void *pvParameter) {
             Serial.println("toggle internal temperature");
             tft.fillCircle(350, 120, 72, TFT_BLACK);  // Clear the circle area
             showBattery = !showBattery;
-            changeInternalTemp(tempInternalTouch);
-
+            if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+              changeInternalTemp(avgInternalTemp);
+              xSemaphoreGive(internalTempMutex);
+            }
           }
 
           if (x > 138 && x < 259 && y > 58 && y < 200)  // toggle external temp measurement
@@ -445,13 +430,14 @@ void touchInterface(void *pvParameter) {
         if (screenStatus == 0 && x <= 100 && x >= 0 && y <= 173 && y >= 0) { // press settigns button
           screenStatus = 1;  // global variable set to settings screen
           printSettings();   // uses function to print the settings screen to the display
-          clearPreviousHighlight(); // Clear the previous highlight
           Serial.println("Settings Button");
       } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
            screenStatus = 0;
           printMain();
-          changeInternalTemp(tempInternalTouch);
-
+          if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
+            changeInternalTemp(avgInternalTemp);
+            xSemaphoreGive(internalTempMutex);
+          }
           if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
             changeRoomTemp(roomTemp);
             xSemaphoreGive(roomTempMutex);
@@ -634,7 +620,7 @@ void startAccessPoint() {
 }
 
 void connectToWiFiTask() {
-    clearWiFiSymbol();
+    
     preferences.begin("wifi-creds", false); // gets log in information
     String ssid = preferences.getString("ssid", "");
     String password = preferences.getString("password", "");
@@ -660,7 +646,6 @@ void connectToWiFiTask() {
 
     Serial.println();
     Serial.println("Connected to Wi-Fi!");
-    drawWiFiSymbol();
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
 }
@@ -677,11 +662,13 @@ void sendBatteryUpdate() {
 
         if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
           localRoomTemp = roomTemp;
+          Serial.println(roomTemp);
           xSemaphoreGive(roomTempMutex);
         }
 
         if(xSemaphoreTake(internalTempMutex, portMAX_DELAY) == pdTRUE){
           localAvgInternalTemp = avgInternalTemp;
+          Serial.println(avgInternalTemp);
           xSemaphoreGive(internalTempMutex);
         }
 
@@ -951,7 +938,6 @@ void updateSelectedArea() {
     }
 }
 
-/// Increase the value of the selected field
 void increaseValue() {
   switch (selectedField) {
     case CHARGING_TIME1:
@@ -1167,12 +1153,6 @@ void printMain() {                         // prints main display
     heatCircle();
   if(chargingState)
     chargeCircle();
-
-  if (WiFi.status() == WL_CONNECTED){
-    drawWiFiSymbol(); 
-  } else {
-    clearWiFiSymbol();
-  }
 }
 
 void printSettings() {
@@ -1215,8 +1195,8 @@ void printSettings() {
   tft.print(chargingTimeHour1);
   tft.print(":");
   tft.print(chargeStartMinute);
-  tft.setCursor(295, 45);
-  tft.print("- ");
+  tft.setCursor(280, 45);
+  tft.print(" - ");
   tft.setCursor(325, 45);
   tft.print(chargingTimeHour2);
   tft.print(":");
@@ -1227,7 +1207,7 @@ void printSettings() {
     tft.drawRect(190, 85, 95, 33, TFT_YELLOW); // Highlight heating time
   } else if (selectedField == HEATING_TIME2){
         tft.drawRect(320, 85, 95, 33, TFT_YELLOW); // Highlight charging time
-  }
+    }
 
   tft.setTextSize(2); // Set the text size
   tft.setCursor(20, 95); // Set cursor position for heating time
@@ -1237,8 +1217,8 @@ void printSettings() {
   tft.print(heatingTimeHour1);
   tft.print(":");
   tft.print(heatingStartMinute);
-  tft.setCursor(295, 90);
-  tft.print("- ");
+  tft.setCursor(280, 90);
+  tft.print(" - ");
   tft.setCursor(325, 90);
   tft.print(heatingTimeHour2);
   tft.print(":");
@@ -1283,13 +1263,11 @@ void printSettings() {
 }
 
 void showTime(void *parameter){
-  int tempScreenStatus = 0;
   while(true){
-    time(&now); // read the current time
-    localtime_r(&now, &tm);             // update the structure tm with the current time
     if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE) {
       if(screenStatus== 0){
-
+        time(&now); // read the current time
+        localtime_r(&now, &tm);             // update the structure tm with the current time
         tft.setTextSize(2); // Set the text size
         // tft.fillRect(52, 12, 190, 30, TFT_BLACK);
         tft.setCursor(52, 12); // Set cursor position for title
@@ -1336,26 +1314,6 @@ void clearCredentials() {
     preferences.remove("password");
     preferences.end();
     Serial.println("Wi-Fi credentials cleared from preferences.");
-}
-
-// Function to draw a WiFi symbol in the top-right corner
-void drawWiFiSymbol() {
-  int x = tft.width() - 450;  // Adjust based on desired position
-  int y = 20;
-
-  tft.fillCircle(x, y, 2, TFT_WHITE);         // Base dot
-  tft.drawCircle(x, y, 5, TFT_WHITE);          // First arc
-  tft.drawCircle(x, y, 8, TFT_WHITE);          // Second arc
-  //tft.drawCircle(x, y, 11, TFT_WHITE);         // Third arc
-}
-
-// Function to clear the WiFi symbol
-void clearWiFiSymbol() {
-  int x = tft.width() - 450;
-  int y = 20;
-  
-  // Clear area around the WiFi symbol (adjust as needed)
-  tft.fillRect(x - 10, y - 10, 24, 24, TFT_BLACK);
 }
 
 void settingSave(){
