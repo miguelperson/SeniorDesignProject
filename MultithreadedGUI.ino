@@ -207,22 +207,22 @@ void toggleTemperatureScale() {
 void highlightSelectedArea() {
     switch (selectedField) {
         case CHARGING_TIME1:
-            tft.drawRect(190, 40, 93, 33, TFT_YELLOW);
+            tft.drawRect(190, 40, 98, 33, TFT_YELLOW);
             break;
         case CHARGING_TIME2:
-            tft.drawRect(320, 40, 92, 33, TFT_YELLOW);
+            tft.drawRect(320, 40, 98, 33, TFT_YELLOW);
             break;
         case HEATING_TIME1:
-            tft.drawRect(190, 85, 93, 33, TFT_YELLOW);
+            tft.drawRect(190, 85, 98, 33, TFT_YELLOW);
             break;
         case HEATING_TIME2:
-            tft.drawRect(320, 85, 92, 33, TFT_YELLOW);
+            tft.drawRect(320, 85, 98, 33, TFT_YELLOW);
             break;
         case TEMPERATURE_RANGE:
-            tft.drawRect(270, 130, 90, 33, TFT_YELLOW);
+            tft.drawRect(272, 130, 88, 33, TFT_YELLOW);
             break;
         case TEMPERATURE_SCALE:
-            tft.drawRect(245, 172, 42, 33, TFT_YELLOW);
+            tft.drawRect(242, 173, 48, 33, TFT_YELLOW);
             break;
         default:
             break;
@@ -232,81 +232,82 @@ void highlightSelectedArea() {
 void clearPreviousHighlight() {
   switch (selectedField) {
     case CHARGING_TIME1:
-      tft.drawRect(190, 40, 93, 33, TFT_BLACK); // Clear charging time 1 highlight
+      tft.drawRect(190, 40, 98, 33, TFT_BLACK); // Clear charging time 1 highlight
       break;
     case CHARGING_TIME2:
-      tft.drawRect(320, 40, 92, 33, TFT_BLACK); // Clear charging time 2 highlight
+      tft.drawRect(320, 40, 98, 33, TFT_BLACK); // Clear charging time 2 highlight
       break;
     case HEATING_TIME1:
-      tft.drawRect(190, 85, 93, 33, TFT_BLACK); // Clear heating time 1 highlight
+      tft.drawRect(190, 85, 98, 33, TFT_BLACK); // Clear heating time 1 highlight
       break;
     case HEATING_TIME2:
-      tft.drawRect(320, 85, 92, 33, TFT_BLACK); // Clear heating time 2 highlight
+      tft.drawRect(320, 85, 98, 33, TFT_BLACK); // Clear heating time 2 highlight
       break;
     case TEMPERATURE_RANGE:
-      tft.drawRect(270, 130, 90, 33, TFT_BLACK); // Clear temperature range highlight
+      tft.drawRect(272, 130, 88, 33, TFT_BLACK); // Clear temperature range highlight
       break;
     case TEMPERATURE_SCALE:
-      tft.drawRect(245, 172, 42, 33, TFT_BLACK); // Clear temperature scale highlight
+      tft.drawRect(242, 173, 48, 33, TFT_BLACK); // Clear temperature scale highlight
       break;
     default:
       break;
   }
 }
 
+
 void updateSelectedArea() {
     switch (selectedField) {
         case CHARGING_TIME1:
             // Clear the area and redraw the updated time
-            tft.fillRect(190, 40, 93, 33, TFT_BLACK);
+            tft.fillRect(190, 40, 98, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(195, 45);
             tft.print(chargingTimeHour1);
             tft.print(":");
-            tft.print("00");
+            tft.print(chargeStartMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
 
         case CHARGING_TIME2:
             // Clear the area and redraw the updated time
-            tft.fillRect(320, 40, 92, 33, TFT_BLACK);
+            tft.fillRect(320, 40, 98, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(325, 45);
             tft.print(chargingTimeHour2);
             tft.print(":");
-            tft.print("00");
+            tft.print(chargeEndMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
 
             case HEATING_TIME1:
             // Clear the area and redraw the updated time
-            tft.fillRect(190, 85, 93, 33, TFT_BLACK);
+            tft.fillRect(190, 85, 98, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(195, 90);
             tft.print(heatingTimeHour1);
             tft.print(":");
-            tft.print("00");
+            tft.print(heatingStartMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
 
         case HEATING_TIME2:
             // Clear the area and redraw the updated time
-            tft.fillRect(320, 85, 92, 33, TFT_BLACK);
+            tft.fillRect(320, 85, 98, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(325, 90);
             tft.print(heatingTimeHour2);
             tft.print(":");
-            tft.print("00");
+            tft.print(heatingEndMinute);
             highlightSelectedArea(); // Ensure the area remains highlighted
             delay(50);
             break;
 
         case TEMPERATURE_RANGE:
             // Clear the area and redraw the updated temperature range
-            tft.fillRect(270, 130, 90, 33, TFT_BLACK);
+            tft.fillRect(272, 130, 88, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(280, 135);
             tft.print(minTemp);
@@ -318,7 +319,7 @@ void updateSelectedArea() {
 
         case TEMPERATURE_SCALE:
             // Clear the area and redraw the updated temperature scale
-            tft.fillRect(245, 172, 42, 33, TFT_BLACK);
+            tft.fillRect(242, 173, 48, 33, TFT_BLACK);
             tft.setTextSize(3);
             tft.setCursor(250, 180);
             tft.print((char)247); // Degree symbol
@@ -334,6 +335,7 @@ void updateSelectedArea() {
             break;
 
         default:
+            clearPreviousHighlight();
             break;
     }
 }
@@ -342,31 +344,48 @@ void updateSelectedArea() {
 void increaseValue() {
   switch (selectedField) {
     case CHARGING_TIME1:
-      chargingTimeHour1 = (chargingTimeHour1 + 1) % 24;
+      // Find the nearest multiple of 15 minutes above the current minute
+      chargeStartMinute = ((chargeStartMinute / 15) + 1) * 15;
+      if (chargeStartMinute >= 60) {
+        chargeStartMinute = 0;  // Reset minutes to 0 when reaching 60
+        chargingTimeHour1 = (chargingTimeHour1 + 1) % 24;  // Increase the hour
+      }
       updateSelectedArea();
       break;
     case CHARGING_TIME2:
-      chargingTimeHour2 = (chargingTimeHour2 + 1) % 24;
+      chargeEndMinute = ((chargeEndMinute / 15) + 1) * 15;
+      if (chargeEndMinute >= 60) {
+        chargeEndMinute = 0;
+        chargingTimeHour2 = (chargingTimeHour2 + 1) % 24;
+      }
       updateSelectedArea();
       break;
     case HEATING_TIME1:
-      heatingTimeHour1 = (heatingTimeHour1 + 1) % 24;
+      heatingStartMinute = ((heatingStartMinute / 15) + 1) * 15;
+      if (heatingStartMinute >= 60) {
+        heatingStartMinute = 0;
+        heatingTimeHour1 = (heatingTimeHour1 + 1) % 24;
+      }
       updateSelectedArea();
       break;
     case HEATING_TIME2:
-      heatingTimeHour2 = (heatingTimeHour2 + 1) % 24;
+      heatingEndMinute = ((heatingEndMinute / 15) + 1) * 15;
+      if (heatingEndMinute >= 60) {
+        heatingEndMinute = 0;
+        heatingTimeHour2 = (heatingTimeHour2 + 1) % 24;
+      }
       updateSelectedArea();
       break;
     case TEMPERATURE_RANGE:
       if (isCelsius) {
-      // For Celsius scale, limit minTemp to maxTemp and ensure it doesn't exceed 36°C
-      if (minTemp < 36) {
-        minTemp++;
-      }
-      // Ensure maxTemp stays within the range (max 36°C)
-      if (maxTemp < 36) {
-        maxTemp++;
-      }
+        // For Celsius scale, limit minTemp to maxTemp and ensure it doesn't exceed 36°C
+        if (minTemp < 36) {
+          minTemp++;
+        }
+        // Ensure maxTemp stays within the range (max 36°C)
+        if (maxTemp < 36) {
+          maxTemp++;
+        }
       } else {
         // For Fahrenheit scale, limit minTemp to maxTemp and ensure it doesn't exceed 96°F
         if (minTemp < 96) {
@@ -391,31 +410,51 @@ void increaseValue() {
 void decreaseValue() {
   switch (selectedField) {
     case CHARGING_TIME1:
-      chargingTimeHour1 = (chargingTimeHour1 - 1 + 24) % 24;
+      chargeStartMinute = (chargeStartMinute / 15) * 15;  // Round down to nearest 15 minutes
+      chargeStartMinute -= 15;
+      if (chargeStartMinute < 0) {
+        chargeStartMinute = 45;  // Set to 45 if minutes go below 0
+        chargingTimeHour1 = (chargingTimeHour1 - 1 + 24) % 24;  // Decrease the hour
+      }
       updateSelectedArea();
       break;
     case CHARGING_TIME2:
-      chargingTimeHour2 = (chargingTimeHour2 - 1 + 24) % 24;
+      chargeEndMinute = (chargeEndMinute / 15) * 15;
+      chargeEndMinute -= 15;
+      if (chargeEndMinute < 0) {
+        chargeEndMinute = 45;
+        chargingTimeHour2 = (chargingTimeHour2 - 1 + 24) % 24;
+      }
       updateSelectedArea();
       break;
     case HEATING_TIME1:
-      heatingTimeHour1 = (heatingTimeHour1 - 1 + 24) % 24;
+      heatingStartMinute = (heatingStartMinute / 15) * 15;
+      heatingStartMinute -= 15;
+      if (heatingStartMinute < 0) {
+        heatingStartMinute = 45;
+        heatingTimeHour1 = (heatingTimeHour1 - 1 + 24) % 24;
+      }
       updateSelectedArea();
       break;
     case HEATING_TIME2:
-      heatingTimeHour2 = (heatingTimeHour2 - 1 + 24) % 24;
+      heatingEndMinute = (heatingEndMinute / 15) * 15;
+      heatingEndMinute -= 15;
+      if (heatingEndMinute < 0) {
+        heatingEndMinute = 45;
+        heatingTimeHour2 = (heatingTimeHour2 - 1 + 24) % 24;
+      }
       updateSelectedArea();
       break;
     case TEMPERATURE_RANGE:
       if (isCelsius) {
-      // For Celsius scale, limit minTemp between 20°C and maxTemp
-      if (minTemp > 20) {
-        minTemp--;
-      }
-      // Ensure maxTemp is not less than minTemp and does not exceed 36°C
-      if (maxTemp > 36) {
-        maxTemp--;
-      }
+        // For Celsius scale, limit minTemp between 20°C and maxTemp
+        if (minTemp > 20) {
+          minTemp--;
+        }
+        // Ensure maxTemp is not less than minTemp and does not exceed 36°C
+        if (maxTemp > 36) {
+          maxTemp--;
+        }
       } else {
         // For Fahrenheit scale, limit minTemp between 68°F and maxTemp
         if (minTemp > 68) {
@@ -435,6 +474,7 @@ void decreaseValue() {
       break;
   }
 }
+
 
 void changeInternalTemp(int newTemp) {  // meant to update the internal sand battery temperature
   if (showBattery) {
@@ -532,8 +572,12 @@ void printMain() {                         // prints main display
 void printSettings() {
   heatingTimeHour1 = finalStartHeating;
   heatingTimeHour2 = finalEndHeating;
+  heatingStartMinute = startHeatingMin;
+  heatingEndMinute = endHeatingMin;
   chargingTimeHour1 = finalStartCharging;
   chargingTimeHour2 = finalEndCharging;
+  chargeStartMinute = startChargingMin;
+  chargeEndMinute = endChargingMin; 
   minTemp = finalTemp;
 
   tft.fillScreen(TFT_WHITE); // Fill the screen with white color
@@ -551,9 +595,9 @@ void printSettings() {
 
   // Highlight charging time field if selected
   if (selectedField == CHARGING_TIME1) {
-    tft.drawRect(190, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+    tft.drawRect(190, 40, 98, 33, TFT_YELLOW); // Highlight charging time
     }  else if (selectedField == CHARGING_TIME2){
-        tft.drawRect(320, 40, 92, 33, TFT_YELLOW); // Highlight charging time
+        tft.drawRect(320, 40, 98, 33, TFT_YELLOW); // Highlight charging time
     }
 
   // Editable fields
@@ -564,17 +608,19 @@ void printSettings() {
   tft.setTextSize(3); // Set the text size
   tft.print(chargingTimeHour1);
   tft.print(":");
-  tft.print("00");
+  tft.print(chargeStartMinute);
+  tft.setCursor(282, 45);
   tft.print(" - ");
+  tft.setCursor(325, 45);
   tft.print(chargingTimeHour2);
   tft.print(":");
-  tft.print("00");
+  tft.print(chargeEndMinute);
 
   // Highlight heating time field if selected
   if (selectedField == HEATING_TIME1) {
-    tft.drawRect(190, 85, 90, 33, TFT_YELLOW); // Highlight heating time
+    tft.drawRect(190, 85, 98, 33, TFT_YELLOW); // Highlight heating time
   } else if (selectedField == HEATING_TIME2){
-        tft.drawRect(320, 85, 92, 33, TFT_YELLOW); // Highlight charging time
+        tft.drawRect(320, 85, 98, 33, TFT_YELLOW); // Highlight charging time
     }
 
   tft.setTextSize(2); // Set the text size
@@ -584,15 +630,17 @@ void printSettings() {
   tft.setTextSize(3); // Set the text size
   tft.print(heatingTimeHour1);
   tft.print(":");
-  tft.print("00");
+  tft.print(heatingStartMinute);
+  tft.setCursor(282, 90);
   tft.print(" - ");
+  tft.setCursor(325, 90);
   tft.print(heatingTimeHour2);
   tft.print(":");
-  tft.print("00");
+  tft.print(heatingEndMinute);
 
   // Highlight temperature range if selected
   if (selectedField == TEMPERATURE_RANGE) {
-    tft.drawRect(270, 130, 90, 33, TFT_YELLOW); // Highlight temperature range
+    tft.drawRect(272, 130, 88, 33, TFT_YELLOW); // Highlight temperature range
   }
 
   tft.setTextSize(2); // Set the text size
@@ -606,7 +654,7 @@ void printSettings() {
 
   // Highlight temperature scale if selected
   if (selectedField == TEMPERATURE_SCALE) {
-    tft.drawRect(245, 172, 42, 33, TFT_YELLOW); // Highlight temperature scale
+    tft.drawRect(242, 173, 48, 33, TFT_YELLOW); // Highlight temperature scale
   }
 
   tft.setTextSize(2); // Set the text size
@@ -653,7 +701,6 @@ void showTime(void *parameter){
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 }
-
 
 void startAccessPoint() {
     WiFi.softAP(apSSID, apPassword);
@@ -749,6 +796,11 @@ void sendBatteryUpdate() {
             doc["finalEndHeating"] = finalEndHeating;
             doc["finalStartCharging"] = finalStartCharging;
             doc["finalEndCharging"] = finalEndCharging;
+            doc["startHeatingMin"] = startHeatingMin;
+            doc["endHeatingMin"] = endHeatingMin;
+            doc["startChargingMin"] = startChargingMin;
+            doc["endChargingMin"] = endChargingMin;
+
         }
 
         // Serialize the JSON document to a string
@@ -1124,10 +1176,10 @@ void heater(void *pvParameter) {  // responsible for heat scheduling ===========
   }
   int tempRoomTemp = 0;
     while (1) {
-      // if(xSemaphoreTake(roomtempMutex, portMAX_DELAY) == pdTRUE){
-      //   tempRoomTemp = roomTemp;
-      //   xSemaphoreGive(roomTempMutex);
-      // }
+       if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
+        tempRoomTemp = roomTemp;
+        xSemaphoreGive(roomTempMutex);
+       }
       if(xSemaphoreTake(roomTempMutex, portMAX_DELAY) == pdTRUE){
         if (tm.tm_hour == finalStartHeating && tm.tm_min == startHeatingMin && tm.tm_sec == 1 && tempRoomTemp < finalTemp) { // at 19:00:01 turn on the heating
           Serial.println("turning on heating");
@@ -1173,14 +1225,29 @@ void settingSave(){
   finalStartCharging = chargingTimeHour1;
   finalEndCharging = chargingTimeHour2;
   finalTemp = minTemp;
-  heatingStartMinute = 0;
-  heatingEndMinute = 0;
-  chargeStartMinute = 0;
-  chargeEndMinute = 0;
+  startHeatingMin = heatingStartMinute;
+  endHeatingMin = heatingEndMinute;
+  startChargingMin = chargeStartMinute;
+  endChargingMin = chargeEndMinute;
   localScheduleFlag = true;
+  Serial.print(finalStartCharging);
+  Serial.print(":");
+  Serial.print(chargeStartMinute);
+  Serial.print(" - ");
+  Serial.print(finalEndCharging);
+  Serial.print(":");
+  Serial.print(chargeEndMinute);
+  Serial.println(" ");
+  Serial.print(finalStartHeating);
+  Serial.print(":");
+  Serial.print(heatingStartMinute);
+  Serial.print(" - ");
+  Serial.print(finalEndHeating);
+  Serial.print(":");
+  Serial.print(heatingEndMinute);
+  Serial.println(" ");
   // Serial.println("local schedule flag set to true");
 }
-
 void touchInterface(void *pvParameter) {
 
   while (1) {
@@ -1264,6 +1331,7 @@ void touchInterface(void *pvParameter) {
         if (screenStatus == 0 && x <= 100 && x >= 0 && y <= 173 && y >= 0) { // press settigns button
           screenStatus = 1;  // global variable set to settings screen
           printSettings();   // uses function to print the settings screen to the display
+          clearPreviousHighlight(); // Clear the previous highlight
           Serial.println("Settings Button");
       } else if (screenStatus == 1 && y > 320 && y < 480 && x < 100) { // back button
           screenStatus = 0;
